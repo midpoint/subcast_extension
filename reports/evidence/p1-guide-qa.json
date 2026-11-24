@@ -1,0 +1,133 @@
+{
+  "started": "2026-11-24T09:32:47.947Z",
+  "checks": [
+    {
+      "name": "guide before configuring a model offers generation + settings",
+      "ok": true,
+      "detail": {
+        "title": "一分钟看懂这一期",
+        "buttons": [
+          "生成导读",
+          "配置模型"
+        ]
+      }
+    },
+    {
+      "name": "LLM endpoint saved in extension storage",
+      "ok": true,
+      "detail": {
+        "baseUrl": "https://www.youtube.com/llm/v1",
+        "model": "mock-guide"
+      }
+    },
+    {
+      "name": "AI guide renders summary, timeline, highlights and timestamp buttons",
+      "ok": true,
+      "detail": {
+        "bar": "AI 生成",
+        "hasSummary": true,
+        "hasTimeline": true,
+        "hasHighlights": true,
+        "ts": [
+          "00:00",
+          "00:20",
+          "00:50",
+          "00:08",
+          "00:28"
+        ]
+      }
+    },
+    {
+      "name": "guide cached in IndexedDB with LLM source",
+      "ok": true,
+      "detail": {
+        "source": "llm",
+        "model": "mock-guide",
+        "len": 284,
+        "hasTimeline": true
+      }
+    },
+    {
+      "name": "guide [00:20] citation seeks the video within 1s",
+      "ok": true,
+      "detail": {
+        "got": 20,
+        "err": 0,
+        "ms": 105
+      }
+    },
+    {
+      "name": "reopened guide loads from cache without regenerating",
+      "ok": true,
+      "detail": {
+        "cachedBadge": "已缓存"
+      }
+    },
+    {
+      "name": "Q&A quick prompts enabled once a model is configured",
+      "ok": true,
+      "detail": {
+        "count": 4,
+        "disabled": [
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
+    {
+      "name": "Q&A streams a grounded answer with clickable citations",
+      "ok": true,
+      "detail": {
+        "user": "用三句话概括这一期讲了什么，并给出最关键的三个时间戳。",
+        "answer": "这期节目先交代了测试目标（00:00），然后在 00:20 附近逐行验证字幕，最后在 00:50 做了总结。",
+        "ts": [
+          "00:00",
+          "00:20",
+          "00:50"
+        ],
+        "pending": false
+      }
+    },
+    {
+      "name": "Q&A turns persisted for this episode",
+      "ok": true,
+      "detail": {
+        "turns": 2,
+        "roles": [
+          "user",
+          "assistant"
+        ],
+        "answer": "这期节目先交代了测试目标（[00:00]），然后在 [00:20] 附近逐行验证字幕，最后在 [00:50] 做了总结。"
+      }
+    },
+    {
+      "name": "Q&A [00:50] citation seeks the video within 1s",
+      "ok": true,
+      "detail": {
+        "got": 50,
+        "err": 0,
+        "ms": 107
+      }
+    },
+    {
+      "name": "Q&A history persists after reopening the panel",
+      "ok": true,
+      "detail": {
+        "users": 1,
+        "assistants": 1,
+        "text": "这期节目先交代了测试目标（00:00），然后在 00:20 附近逐行验证字幕，最后在 00:50 做了总结。"
+      }
+    },
+    {
+      "name": "shared-guide lookup miss falls through to the configured model",
+      "ok": true,
+      "detail": {
+        "sharedApi": "https://subcast.qiaomu.ai/api/v1/guides returned 404 for yt:FIXMANUAL01 (not_found)"
+      }
+    }
+  ],
+  "extensionId": "jgimajhffcgfabccljcgphnfdfmpjhgp",
+  "finished": "2026-11-24T09:32:55.883Z"
+}

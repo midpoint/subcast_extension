@@ -1,0 +1,220 @@
+{
+  "started": "2026-11-24T09:35:33.878Z",
+  "checks": [
+    {
+      "name": "extension unpacked & service worker running",
+      "ok": true,
+      "detail": "jgimajhffcgfabccljcgphnfdfmpjhgp"
+    },
+    {
+      "name": "fixture watch page loads as youtube.com",
+      "ok": true,
+      "detail": {
+        "title": "Fixture: manual captions - YouTube"
+      }
+    },
+    {
+      "name": "manual captions stored (12 segments, official)",
+      "ok": true,
+      "detail": {
+        "segments": 12,
+        "source": "official",
+        "language": "en"
+      }
+    },
+    {
+      "name": "auto translation completed, 1:1 aligned",
+      "ok": true,
+      "detail": {
+        "items": 12,
+        "translated": 12,
+        "engine": "google",
+        "first": "中译第1句"
+      }
+    },
+    {
+      "name": "overlay renders bilingual line at 00:07 (line 2)",
+      "ok": true,
+      "detail": {
+        "orig": "This is line 2, about evidence and signal in the reason of things.",
+        "zh": "中译第2句",
+        "hidden": false
+      }
+    },
+    {
+      "name": "found tab id for panel targeting",
+      "ok": true,
+      "detail": 193338615
+    },
+    {
+      "name": "side panel lists all subtitle rows",
+      "ok": true,
+      "detail": {
+        "rows": 12,
+        "active": 1,
+        "texts": [
+          {
+            "orig": "This is line 1, about insight and system in the model of things.",
+            "zh": "中译第1句",
+            "time": "0:00"
+          },
+          {
+            "orig": "This is line 2, about evidence and signal in the reason of things.",
+            "zh": "中译第2句",
+            "time": "0:05"
+          },
+          {
+            "orig": "This is line 3, about practice and story in the pattern of things.",
+            "zh": "中译第3句",
+            "time": "0:10"
+          }
+        ],
+        "title": "",
+        "state": "",
+        "source": "官方字幕",
+        "meta": "官方字幕EN1:00:00谷歌翻译"
+      }
+    },
+    {
+      "name": "active row follows playback (00:10 line)",
+      "ok": true,
+      "detail": {
+        "active": 2,
+        "texts": [
+          {
+            "orig": "This is line 1, about insight and system in the model of things.",
+            "zh": "中译第1句",
+            "time": "0:00"
+          },
+          {
+            "orig": "This is line 2, about evidence and signal in the reason of things.",
+            "zh": "中译第2句",
+            "time": "0:05"
+          },
+          {
+            "orig": "This is line 3, about practice and story in the pattern of things.",
+            "zh": "中译第3句",
+            "time": "0:10"
+          }
+        ]
+      }
+    },
+    {
+      "name": "5 click-to-seek checks land within 1s error",
+      "ok": true,
+      "detail": [
+        {
+          "idx": 0,
+          "expected": 0,
+          "got": 0,
+          "err": 0,
+          "ms": 111,
+          "pass": true,
+          "before": 11.5
+        },
+        {
+          "idx": 2,
+          "expected": 10,
+          "got": 10,
+          "err": 0,
+          "ms": 109,
+          "pass": true,
+          "before": 0
+        },
+        {
+          "idx": 4,
+          "expected": 20,
+          "got": 20,
+          "err": 0,
+          "ms": 106,
+          "pass": true,
+          "before": 10
+        },
+        {
+          "idx": 6,
+          "expected": 30,
+          "got": 30,
+          "err": 0,
+          "ms": 107,
+          "pass": true,
+          "before": 20
+        },
+        {
+          "idx": 8,
+          "expected": 40,
+          "got": 40,
+          "err": 0,
+          "ms": 106,
+          "pass": true,
+          "before": 30
+        }
+      ]
+    },
+    {
+      "name": "active row after seek matches last seek (00:40)",
+      "ok": true,
+      "detail": {
+        "active": 8
+      }
+    },
+    {
+      "name": "Chinese-only mode hides original lines",
+      "ok": true,
+      "detail": {
+        "origCount": 0,
+        "zhCount": 12,
+        "first": "中译第1句"
+      }
+    },
+    {
+      "name": "original-only mode hides Chinese lines",
+      "ok": true,
+      "detail": {
+        "origCount": 12,
+        "zhCount": 0
+      }
+    },
+    {
+      "name": "cache hit on reopen: no caption refetch, translation intact",
+      "ok": true,
+      "detail": {
+        "beforeLog": 1,
+        "afterLog": 1,
+        "delta": 0,
+        "source": "official",
+        "status": "done",
+        "translated": 12
+      }
+    },
+    {
+      "name": "overlay works from cached episode after reload",
+      "ok": true,
+      "detail": {
+        "orig": "This is line 4, about system and language in the language of things.",
+        "zh": "中译第4句",
+        "hidden": false
+      }
+    },
+    {
+      "name": "auto-caption-only video detected as youtube-auto and translated",
+      "ok": true,
+      "detail": {
+        "source": "youtube-auto",
+        "segments": 12,
+        "status": "done",
+        "translated": 12
+      }
+    },
+    {
+      "name": "no-captions video shows cloud-ASR empty state (no false list)",
+      "ok": true,
+      "detail": {
+        "state": "该视频没有官方字幕",
+        "text": "YouTube 没有为这个视频提供字幕轨，共享字幕库里也还没有。可以用你自己的 Groq 或 OpenAI Key 做云端识别，识别完会自动翻译；音频只会发给你配置的服务。",
+        "rows": 0
+      }
+    }
+  ],
+  "extensionId": "jgimajhffcgfabccljcgphnfdfmpjhgp",
+  "finished": "2026-11-24T09:35:56.035Z"
+}

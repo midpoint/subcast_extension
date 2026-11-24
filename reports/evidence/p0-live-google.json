@@ -1,0 +1,38 @@
+{
+  "started": "2026-11-24T09:41:08.552Z",
+  "checks": [
+    {
+      "name": "live Google path: direct probe times out, China relay returns translations",
+      "ok": true,
+      "detail": {
+        "status": "done",
+        "ms": 13097,
+        "items": [
+          "递归的自我完善开始了。",
+          "一个小实验可以揭示一个大真理。",
+          "记忆和注意力决定了人们讲故事的方式。"
+        ]
+      }
+    },
+    {
+      "name": "live translations contain no fixture-mock text",
+      "ok": true,
+      "detail": [
+        "递归的自我完善开始了。",
+        "一个小实验可以揭示一个大真理。",
+        "记忆和注意力决定了人们讲故事的方式。"
+      ]
+    },
+    {
+      "name": "live translations render in the side panel",
+      "ok": true,
+      "detail": {
+        "rows": 3,
+        "engine": "官方字幕\nEN\n1:00:00\n谷歌翻译",
+        "zh": "递归的自我完善开始了。"
+      }
+    }
+  ],
+  "extensionId": "jgimajhffcgfabccljcgphnfdfmpjhgp",
+  "finished": "2026-11-24T09:41:24.368Z"
+}

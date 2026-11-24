@@ -1,0 +1,97 @@
+{
+  "keys": [
+    "yt:FIXNONE0001"
+  ],
+  "title": "Fixture: no captions",
+  "show": "SubCast Fixture",
+  "duration": 3600,
+  "source": "cloud",
+  "model": "whisper-large-v3",
+  "language": "en",
+  "segments": [
+    {
+      "start": 0,
+      "end": 4.8,
+      "text": "This is line 1, about insight and system in the model of things."
+    },
+    {
+      "start": 5,
+      "end": 9.8,
+      "text": "This is line 2, about insight and system in the model of things."
+    },
+    {
+      "start": 10,
+      "end": 14.8,
+      "text": "This is line 3, about insight and system in the model of things."
+    },
+    {
+      "start": 15,
+      "end": 19.8,
+      "text": "This is line 4, about insight and system in the model of things."
+    },
+    {
+      "start": 20,
+      "end": 24.8,
+      "text": "This is line 5, about insight and system in the model of things."
+    },
+    {
+      "start": 25,
+      "end": 29.8,
+      "text": "This is line 6, about insight and system in the model of things."
+    },
+    {
+      "start": 30,
+      "end": 34.8,
+      "text": "This is line 7, about insight and system in the model of things."
+    },
+    {
+      "start": 35,
+      "end": 39.8,
+      "text": "This is line 8, about insight and system in the model of things."
+    },
+    {
+      "start": 40,
+      "end": 44.8,
+      "text": "This is line 9, about insight and system in the model of things."
+    },
+    {
+      "start": 45,
+      "end": 49.8,
+      "text": "This is line 10, about insight and system in the model of things."
+    },
+    {
+      "start": 50,
+      "end": 54.8,
+      "text": "This is line 11, about insight and system in the model of things."
+    },
+    {
+      "start": 55,
+      "end": 59.8,
+      "text": "This is line 12, about insight and system in the model of things."
+    }
+  ],
+  "translation": {
+    "lang": "zh-CN",
+    "engine": "google",
+    "model": "google",
+    "items": [
+      "中译第1句",
+      "中译第2句",
+      "中译第3句",
+      "中译第4句",
+      "中译第5句",
+      "中译第6句",
+      "中译第7句",
+      "中译第8句",
+      "中译第9句",
+      "中译第10句",
+      "中译第11句",
+      "中译第12句"
+    ]
+  },
+  "client": {
+    "app": "subcast-extension",
+    "version": "0.1.0",
+    "install": "<anonymous random UUID redacted>"
+  }
+}

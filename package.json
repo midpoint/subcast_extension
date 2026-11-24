@@ -1,0 +1,30 @@
+{
+  "name": "subcast-extension",
+  "private": true,
+  "version": "0.1.0",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "description": "SubCast 声渡 Chrome 插件：YouTube 双语字幕、AI 导读与问答",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "compile": "tsc --noEmit",
+    "test": "vitest run",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "lucide-react": "^0.460.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.7",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@wxt-dev/module-react": "^1.2.2",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0",
+    "wxt": "^0.21.5"
+  }
+}

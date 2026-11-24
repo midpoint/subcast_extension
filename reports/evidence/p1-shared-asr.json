@@ -1,0 +1,137 @@
+{
+  "started": "2026-11-24T09:35:13.589Z",
+  "checks": [
+    {
+      "name": "shared transcript hit is used instead of YouTube captions",
+      "ok": true,
+      "detail": {
+        "source": "shared",
+        "sharedSource": "whisper",
+        "language": "en",
+        "segments": 4,
+        "status": "partial",
+        "title": "Fixture: shared transcript",
+        "captionFetches": 0
+      }
+    },
+    {
+      "name": "shared transcript with a missing line is completed by auto translation, 1:1 aligned",
+      "ok": true,
+      "detail": {
+        "status": "done",
+        "items": [
+          "共享第一句",
+          "共享第二句",
+          "中译：Shared line three about the design.",
+          "共享第四句"
+        ]
+      }
+    },
+    {
+      "name": "panel labels the shared source and shows its translation",
+      "ok": true,
+      "detail": {
+        "badge": "共享字幕 · 本地识别",
+        "rows": 4,
+        "zh": "共享第一句"
+      }
+    },
+    {
+      "name": "shared guide is used without calling a model",
+      "ok": true,
+      "detail": {
+        "badge": "共享导读",
+        "text": "一句话总结\n\n这是共享导读：用一个测试片段验证共享导读的命中与缓存。\n\n时间线\n00:00 开场：共享导读第一条。\n00:12 中段：共享导读第二条。",
+        "ts": [
+          "00:00",
+          "00:12"
+        ]
+      }
+    },
+    {
+      "name": "shared guide timestamp seeks the video",
+      "ok": true,
+      "detail": {
+        "got": 12
+      }
+    },
+    {
+      "name": "cloud ASR configured (Groq + user key, stored locally)",
+      "ok": true,
+      "detail": {
+        "engine": "groq",
+        "model": "whisper-large-v3"
+      }
+    },
+    {
+      "name": "cloud ASR stores a cloud episode with 12 segments and the model name",
+      "ok": true,
+      "detail": {
+        "source": "cloud",
+        "segments": 12,
+        "asrModel": "whisper-large-v3",
+        "status": "done"
+      }
+    },
+    {
+      "name": "cloud ASR result is auto-translated 1:1",
+      "ok": true,
+      "detail": {
+        "status": "done",
+        "first": "中译第1句"
+      }
+    },
+    {
+      "name": "panel shows the cloud transcript after ASR",
+      "ok": true,
+      "detail": {
+        "badge": "云端识别",
+        "rows": 12,
+        "zh": "中译第1句",
+        "toast": "字幕已共享给其他人（created）"
+      }
+    },
+    {
+      "name": "cloud transcript is shared without audio and with an honest cloud source",
+      "ok": true,
+      "detail": {
+        "keys": [
+          "yt:FIXNONE0001"
+        ],
+        "source": "cloud",
+        "model": "whisper-large-v3",
+        "segments": 12,
+        "translation": 12,
+        "client": {
+          "app": "subcast-extension",
+          "version": "0.1.0",
+          "install": "<install-uuid-redacted>"
+        },
+        "hasAudioField": false
+      }
+    },
+    {
+      "name": "shared upload used the user-key ASR endpoint only via the configured provider",
+      "ok": true,
+      "detail": {
+        "asrRequests": 1
+      }
+    },
+    {
+      "name": "uploaded cloud transcript becomes a visible shared hit, no second ASR pass",
+      "ok": true,
+      "detail": {
+        "source": "shared",
+        "sharedSource": "cloud",
+        "asrCalls": 1,
+        "badge": {
+          "badge": "共享字幕 · 云端",
+          "rows": 12,
+          "zh": "中译第1句"
+        }
+      }
+    }
+  ],
+  "extensionId": "jgimajhffcgfabccljcgphnfdfmpjhgp",
+  "finished": "2026-11-24T09:35:20.848Z"
+}

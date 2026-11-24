@@ -1,0 +1,106 @@
+{
+  "started": "2026-11-24T09:32:40.622Z",
+  "checks": [
+    {
+      "name": "60-minute fixture: 900 caption lines stored",
+      "ok": true,
+      "detail": {
+        "segments": 900,
+        "duration": 3600,
+        "ms": 1048
+      }
+    },
+    {
+      "name": "900 lines translated, every line 1:1 aligned to its source",
+      "ok": true,
+      "detail": {
+        "translateMs": 516,
+        "wrong": [],
+        "first": [
+          "中译第1句",
+          "中译第2句",
+          "中译第3句"
+        ],
+        "last": [
+          "中译第899句",
+          "中译第900句"
+        ]
+      }
+    },
+    {
+      "name": "side panel renders all 900 rows for the 60-minute episode",
+      "ok": true,
+      "detail": {
+        "rows": 900
+      }
+    },
+    {
+      "name": "5 seek checks on the long episode land within 1s",
+      "ok": true,
+      "detail": [
+        {
+          "idx": 1,
+          "expected": 4,
+          "got": 4,
+          "err": 0,
+          "ms": 113
+        },
+        {
+          "idx": 3,
+          "expected": 12,
+          "got": 12,
+          "err": 0,
+          "ms": 111
+        },
+        {
+          "idx": 5,
+          "expected": 20,
+          "got": 20,
+          "err": 0,
+          "ms": 109
+        },
+        {
+          "idx": 7,
+          "expected": 28,
+          "got": 28,
+          "err": 0,
+          "ms": 109
+        },
+        {
+          "idx": 9,
+          "expected": 36,
+          "got": 36,
+          "err": 0,
+          "ms": 109
+        }
+      ]
+    },
+    {
+      "name": "simulated interruption leaves 100 missing lines",
+      "ok": true,
+      "detail": {
+        "missing": 100
+      }
+    },
+    {
+      "name": "reload resumes only missing lines; alignment intact; no caption refetch",
+      "ok": true,
+      "detail": {
+        "captionRefetch": 0,
+        "keptEqual": true,
+        "wrong": [],
+        "translated": 900
+      }
+    },
+    {
+      "name": "panel still loads the resumed long episode",
+      "ok": true,
+      "detail": {
+        "rows": 900,
+        "firstZh": "中译第1句"
+      }
+    }
+  ],
+  "extensionId": "jgimajhffcgfabccljcgphnfdfmpjhgp",
+  "finished": "2026-11-24T09:32:47.090Z"
+}
