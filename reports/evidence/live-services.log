@@ -1,0 +1,24 @@
+# Live service checks 2026-11-24T17:36:13+08:00
+## shared transcripts (real service)
+{"error":"not_found"}
+HTTP 404
+
+## shared guides (real service)
+{"error":"not_found"}
+HTTP 404
+
+## shared exists (real service)
+{"found":[]}
+HTTP 200
+
+## Google direct (no proxy)
+curl: (28) Connection timed out after 12002 milliseconds
+HTTP 000
+
+## China relay (no proxy), 3 attempts
+attempt 1: HTTP 200, 224 bytes
+[[["递归的自我完善开始了。","Recursive self-improvement has started."
+attempt 2: HTTP 200, 224 bytes
+[[["递归的自我完善开始了。","Recursive self-improvement has started."
+attempt 3: HTTP 200, 224 bytes
+[[["递归的自我完善开始了。","Recursive self-improvement has started."

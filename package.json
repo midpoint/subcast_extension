@@ -5,6 +5,14 @@
   "license": "AGPL-3.0-only",
   "type": "module",
   "description": "SubCast 声渡 Chrome 插件：YouTube 双语字幕、AI 导读与问答",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/midpoint/subcast_extension.git"
+  },
+  "homepage": "https://github.com/midpoint/subcast_extension#readme",
+  "bugs": {
+    "url": "https://github.com/midpoint/subcast_extension/issues"
+  },
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",

@@ -3,3 +3,6 @@ node_modules
 .wxt
 .stats.html
 *.zip
+
+# acceptance evidence logs are part of the report
+!reports/evidence/*.log
