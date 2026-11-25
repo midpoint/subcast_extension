@@ -2,7 +2,7 @@
 
 把 YouTube 视频变成「双语字幕 + AI 导读 + 带时间戳的问答」的 Chrome Manifest V3 插件。
 
-![双语字幕侧边栏](reports/assets/p0-panel-bilingual.png)
+![YouTube 视频页的 SubCast 侧边栏：自动字幕、双语对照和当前句高亮](reports/assets/panel-youtube.jpg)
 
 ## 这个项目从哪来
 
