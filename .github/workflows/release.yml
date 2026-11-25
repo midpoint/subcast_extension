@@ -1,0 +1,111 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so the release notes can start at the previous tag.
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Resolve version
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "$EVENT_NAME" = "push" ] && [ "v$VERSION" != "$REF_NAME" ]; then
+            echo "::error::package.json is v$VERSION but the pushed tag is $REF_NAME. Bump package.json before tagging."
+            exit 1
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$VERSION"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run compile
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Verify manifest version
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          node - <<'NODE'
+          const manifest = require('./.output/chrome-mv3/manifest.json');
+          if (manifest.version !== process.env.VERSION) {
+            console.error(`manifest.json is ${manifest.version}, expected ${process.env.VERSION}`);
+            process.exit(1);
+          }
+          console.log(`manifest.json version: ${manifest.version}`);
+          NODE
+
+      - name: Package zip
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          npm run zip
+          VERSIONED=".output/subcast-extension-${VERSION}-chrome.zip"
+          test -f "$VERSIONED"
+          # Stable asset name for /releases/latest/download/ links.
+          cp "$VERSIONED" .output/subcast-extension-chrome.zip
+          ls -lh .output/*.zip
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          ARGS=(--title "SubCast 声渡 Chrome 插件 v$VERSION" --generate-notes)
+
+          # Compare against the previous release when there is one.
+          PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          if [ -n "$PREV" ]; then
+            ARGS+=(--notes-start-tag "$PREV")
+          fi
+
+          # A manual run may not have the tag yet; create it on the selected commit.
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            ARGS+=(--target "$GITHUB_SHA")
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; replacing its zip assets."
+            gh release upload "$TAG" .output/*.zip --clobber
+          else
+            gh release create "$TAG" .output/*.zip "${ARGS[@]}"
+          fi

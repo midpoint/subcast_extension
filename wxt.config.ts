@@ -7,7 +7,7 @@ export default defineConfig({
   manifest: {
     name: 'SubCast · 声渡 — YouTube 双语字幕',
     description: 'YouTube 双语字幕、AI 导读和带时间戳的 AI 问答。共享字幕优先，没有官方字幕时可用自己的 Key 走云端识别。',
-    version: '0.1.0',
+    // Version comes from package.json (WXT default), so `npm version` is the single source of truth.
     minimum_chrome_version: '116',
     permissions: ['storage', 'unlimitedStorage', 'sidePanel', 'offscreen', 'tabs', 'scripting'],
     host_permissions: [

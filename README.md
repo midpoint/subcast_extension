@@ -30,22 +30,33 @@
 
 ## 安装
 
-### 从源码构建（目前唯一方式）
+### 从 GitHub Release 安装（推荐）
+
+每次发布都会生成一个可直接加载的 zip：
+
+<https://github.com/midpoint/subcast_extension/releases/latest/download/subcast-extension-chrome.zip>
+
+1. 下载并解压到一个固定目录（不要放在「下载」里临时目录，Chrome 会记住这个路径）。
+2. 打开 `chrome://extensions`，开启右上角「开发者模式」。
+3. 点「加载已解压的扩展程序」，选择解压后的目录。
+4. 打开任意 YouTube 视频，点地址栏右侧的 SubCast 图标打开侧边栏。
+
+> 插件尚未上架 Chrome Web Store，所以以「已解压扩展」的方式加载。Chrome 启动时可能提示关闭开发者模式扩展，选择保留即可。
+
+### 从源码构建
 
 要求 Node.js 20+、Chrome / Chromium 116+。
 
 ```bash
 git clone https://github.com/midpoint/subcast_extension.git
 cd subcast_extension
-npm install
+npm ci
 npm run build
 ```
 
-1. 打开 `chrome://extensions`，开启右上角「开发者模式」。
-2. 点「加载已解压的扩展程序」，选择本仓库的 `.output/chrome-mv3`。
-3. 打开任意 YouTube 视频，点地址栏右侧的 SubCast 图标打开侧边栏；播放器右下角也会出现「声渡」浮层入口。
+然后在 `chrome://extensions` 里加载 `.output/chrome-mv3`。
 
-> 插件尚未上架 Chrome Web Store，需要手动加载。侧边栏必须从工具栏图标打开；扩展页里直接访问 `chrome-extension://<id>/sidepanel.html` 只是调试入口。
+> 侧边栏必须从工具栏图标打开；扩展页里直接访问 `chrome-extension://<id>/sidepanel.html` 只是调试入口。
 
 ## 使用
 
@@ -153,6 +164,30 @@ P0（YouTube 双语字幕链）和 P1（导读 / 问答 / 共享 / 云端识别�
 4. **共享库没有真实命中数据**：真实服务对测试 key 返回 404、`/transcripts/exists` 返回空列表；命中、共享导读、上传后可见性用同协议 mock 验证。
 5. Google 翻译中转是第三方免费服务，可能限流或返回 429；可在设置里改用模型翻译。
 6. P2（小宇宙 / Apple Podcasts 网页、RSS、高亮与历史）未实现。
+
+## 发版
+
+版本号只有一个来源：`package.json`。WXT 构建时会把它写进 `manifest.json`，工作流会再核对一次。
+
+```bash
+./scripts/release.sh patch            # 0.1.0 -> 0.1.1
+./scripts/release.sh minor            # 0.1.0 -> 0.2.0
+./scripts/release.sh major            # 0.1.0 -> 1.0.0
+./scripts/release.sh patch --dry-run  # 只跑检查和构建，不改文件
+./scripts/release.sh patch --no-push  # 只在本地提交和打标签
+```
+
+脚本会依次运行类型检查、单元测试和生产构建，然后修改 `package.json` / `package-lock.json`、提交 `Release vX.Y.Z`、打标签并推送 `main` 和标签。推送 `v*` 标签会触发 [.github/workflows/release.yml](.github/workflows/release.yml)：
+
+1. 在 GitHub 的 Ubuntu runner 上 `npm ci`；
+2. 跑 `tsc --noEmit`、Vitest 和生产构建；
+3. 核对 `manifest.json` 的版本与标签一致；
+4. 打包 `subcast-extension-X.Y.Z-chrome.zip`，并复制一份稳定命名的 `subcast-extension-chrome.zip`；
+5. 创建 GitHub Release，附上两个 zip，自动生成从上一个版本开始的更新说明。
+
+如果只想重新发布当前版本，可以在 Actions 页面手动运行 `Release` 工作流；它会按 `package.json` 的版本创建标签和 Release。已存在的 Release 会更新 zip 附件，不会创建重复 Release。
+
+> 首次推送前需要给本地仓库配置 `origin`。如果所在网络只能通过镜像访问 GitHub，可以用 `PUSH_URL=... ./scripts/release.sh patch` 覆盖推送地址。
 
 ## 许可证与署名
 
