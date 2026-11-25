@@ -99,7 +99,7 @@ jobs:
           fi
 
           # A manual run may not have the tag yet; create it on the selected commit.
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
             ARGS+=(--target "$GITHUB_SHA")
           fi
 

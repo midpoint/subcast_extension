@@ -50,6 +50,14 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   exit 1
 fi
 
+REPO_ROOT=$(git rev-parse --show-toplevel)
+if [ "$REPO_ROOT" != "$(pwd -P)" ]; then
+  echo "Run this script from the extension repository root, not a subdirectory of another repo." >&2
+  echo "  script root: $(pwd -P)" >&2
+  echo "  repo root:   $REPO_ROOT" >&2
+  exit 1
+fi
+
 if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
   echo "Releases are cut from main; current branch is $(git rev-parse --abbrev-ref HEAD)." >&2
   exit 1
