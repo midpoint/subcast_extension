@@ -1,7 +1,7 @@
 {
   "name": "subcast-extension",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.1",
   "license": "AGPL-3.0-only",
   "type": "module",
   "description": "SubCast 声渡 Chrome 插件：YouTube 与小宇宙播客的双语字幕、AI 导读与问答",
