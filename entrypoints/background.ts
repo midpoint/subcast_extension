@@ -3,7 +3,7 @@
  *  writes IndexedDB, and streams events back. MV3 may stop this worker at any time, so every piece of
  *  lasting state lives in IndexedDB / chrome.storage, never only in memory. */
 import { bestAudio } from '../src/lib/asr';
-import { chooseTrack, clean, resegment } from '../src/lib/captions';
+import { autoCaptionsMismatch, chooseTrack, clean, resegment } from '../src/lib/captions';
 import { getEpisode, getGuide, putEpisode, putGuide, updateEpisode } from '../src/lib/db';
 import { isKeyError, llmChat, llmReady } from '../src/lib/llm';
 import { videoIdFromUrl } from '../src/lib/media';
@@ -387,7 +387,11 @@ function wrongCachedTrack(meta: VideoMeta, rec: EpisodeRecord): boolean {
   if (rec.manualTrack) return false;
   if (rec.source !== 'official' && rec.source !== 'youtube-auto') return false;
   const spoken = meta.originalLanguage ? langRoot(meta.originalLanguage) : '';
-  if (!spoken || langRoot(rec.language) === spoken || rec.spokenLanguage === spoken) return false;
+  if (!spoken || langRoot(rec.language) === spoken) return false;
+  // Auto captions in another language do not match the audio, even if no other track exists:
+  // never keep such a cached transcript in front of the viewer.
+  if (rec.source === 'youtube-auto') return true;
+  if (rec.spokenLanguage === spoken) return false;
   return meta.tracks.some((t) => langRoot(t.language) === spoken);
 }
 
@@ -433,8 +437,12 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
     setStatus(tabId, { state: 'loading', step: '获取 YouTube 字幕' });
     let currentMeta = meta;
     let segments = await fetchFromTracks(currentMeta);
-    if (!segments.segments.length && currentMeta.origin === 'page') {
-      // Caption URLs from the watch page can go stale; ask InnerTube while we are at it.
+    if (
+      (!segments.segments.length || autoCaptionsMismatch(segments.language, segments.auto, currentMeta.originalLanguage)) &&
+      currentMeta.origin === 'page'
+    ) {
+      // Caption URLs from the watch page can go stale; ask InnerTube while we are at it. A fresh
+      // response may also list an audio-language track the watch page did not include.
       const fresh = await fetchInnerTubeMeta(meta.videoId, meta.url);
       if (fresh) {
         currentMeta = {
@@ -464,6 +472,12 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
       }
       return;
     }
+    if (autoCaptionsMismatch(segments.language, segments.auto, currentMeta.originalLanguage)) {
+      // The audio is Chinese but YouTube only offers English auto captions (or the reverse): the
+      // text does not match the speech, so generate a transcript from the audio instead.
+      await cloudForMismatchedCaptions(tabId, currentMeta, segments.language);
+      return;
+    }
     const rec: EpisodeRecord = {
       key,
       videoId: meta.videoId,
@@ -490,6 +504,28 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
   });
   pipelineRuns.set(key, run);
   return run;
+}
+
+/** The only captions YouTube offers are auto-generated in a language that is not spoken in the
+ *  video. Showing them would put the wrong text under the audio, so use the same cloud ASR path as
+ *  a video without captions; if no ASR key is configured, say why the captions were ignored. */
+async function cloudForMismatchedCaptions(tabId: number, meta: VideoMeta, captionLanguage: string): Promise<void> {
+  const settings = await getSettings();
+  const spoken = meta.originalLanguage ? langRoot(meta.originalLanguage) : '';
+  if (settings.asrEngine !== 'off' && settings.asrKey.trim()) {
+    const message = `YouTube 只有 ${captionLanguage.toUpperCase()} 自动字幕，和视频语音不一致，正在用云端识别生成字幕`;
+    log('auto captions mismatch, cloud asr', meta.videoId, captionLanguage, spoken);
+    broadcast({ type: 'TOAST', kind: 'info', message });
+    setStatus(tabId, { state: 'loading', step: '自动字幕和语音不一致，改用云端识别…' });
+    await startAsr(tabId, meta);
+    return;
+  }
+  broadcast({
+    type: 'TOAST',
+    kind: 'info',
+    message: `YouTube 只有 ${captionLanguage.toUpperCase()} 自动字幕，和视频语音不一致；配置云端识别后可以按语音生成字幕`,
+  });
+  setStatus(tabId, { state: 'no-captions', mismatch: { spoken, found: captionLanguage } });
 }
 
 async function fetchFromTracks(meta: VideoMeta): Promise<{ segments: EpisodeRecord['segments']; language: string; auto: boolean; tried: boolean }> {

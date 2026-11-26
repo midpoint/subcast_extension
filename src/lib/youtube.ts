@@ -101,6 +101,10 @@ function originalLanguage(player: any): string | undefined {
     if (lang) return lang;
   }
   if (defaultLang) return defaultLang;
+  const declared = typeof player?.videoDetails?.defaultAudioLanguage === 'string'
+    ? baseLang(player.videoDetails.defaultAudioLanguage)
+    : '';
+  if (/^[a-z]{2,3}$/.test(declared)) return declared;
   if (named.size === 1) return [...named][0];
   // One audio language and several auto-caption languages (dubbing without a default flag).
   return all.size === 1 ? [...all][0] : undefined;

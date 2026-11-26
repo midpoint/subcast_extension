@@ -228,6 +228,15 @@ export function scriptHint(title: string): string | null {
 }
 
 /** The track to show: a human-made one in the spoken language, else the auto track in it, else English. */
+/** YouTube auto captions in a language other than the audio are usually a machine translation of
+ *  the spoken track, or a mis-detected track; using them shows text that does not match what the
+ *  viewer hears. Uploader-provided subtitles (`auto === false`) are never rejected this way. */
+export function autoCaptionsMismatch(language: string, auto: boolean, originalLanguage?: string | null): boolean {
+  if (!auto) return false;
+  const spoken = originalLanguage ? baseLang(originalLanguage) : '';
+  return Boolean(spoken) && baseLang(language) !== spoken;
+}
+
 export function chooseTrack(tracks: CaptionTrack[], originalLanguage?: string | null, title = ''): CaptionTrack | null {
   if (!tracks.length) return null;
   const autos = tracks.filter((t) => t.auto);

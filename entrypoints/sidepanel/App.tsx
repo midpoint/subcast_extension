@@ -39,6 +39,24 @@ const SHARED_LABEL: Record<string, string> = {
   qwen3: '本地识别',
 };
 
+const LANGUAGE_LABEL: Record<string, string> = {
+  zh: '中文',
+  en: '英语',
+  ja: '日语',
+  ko: '韩语',
+  es: '西班牙语',
+  fr: '法语',
+  de: '德语',
+  it: '意大利语',
+  pt: '葡萄牙语',
+  ru: '俄语',
+};
+
+function languageLabel(code: string): string {
+  const base = code.split(/[-_]/)[0]?.toLowerCase() ?? code;
+  return LANGUAGE_LABEL[base] ?? code.toUpperCase();
+}
+
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
@@ -474,6 +492,7 @@ export default function App() {
   const showList = Boolean(episode?.segments.length);
   const showLoading = !showList && (status.state === 'loading' || status.state === 'idle');
   const showNoCaptions = !showList && status.state === 'no-captions';
+  const captionMismatch = status.state === 'no-captions' ? status.mismatch : undefined;
   const showError = !showList && status.state === 'error';
 
   return (
@@ -552,6 +571,7 @@ export default function App() {
           {showNoCaptions && (
             <NoCaptions
               podcast={isPodcast}
+              mismatch={captionMismatch}
               asrConfigured={asrConfigured}
               confirming={confirmAsr}
               onConfirm={() => setConfirmAsr(true)}
@@ -713,6 +733,7 @@ function TrackPicker({
 
 function NoCaptions({
   podcast,
+  mismatch,
   asrConfigured,
   confirming,
   onConfirm,
@@ -721,6 +742,7 @@ function NoCaptions({
   onSettings,
 }: {
   podcast: boolean;
+  mismatch?: { spoken: string; found: string };
   asrConfigured: boolean;
   confirming: boolean;
   onConfirm: () => void;
@@ -728,15 +750,21 @@ function NoCaptions({
   onRun: () => void;
   onSettings: () => void;
 }) {
+  const title = mismatch
+    ? 'YouTube 自动字幕和语音语言不一致'
+    : podcast
+      ? '还没有这期播客的字幕'
+      : '该视频没有官方字幕';
+  const sub = mismatch
+    ? `这个视频说的是${languageLabel(mismatch.spoken)}，但 YouTube 只提供了${languageLabel(mismatch.found)}的自动字幕，原文通常和实际语音对不上。可以用你自己的 Groq 或 OpenAI Key 做云端识别，直接按语音生成字幕；音频只发给你配置的服务。`
+    : podcast
+      ? '播客没有现成的字幕轨，需要把音频发给你自己的 Groq 或 OpenAI 识别服务来生成。识别完会自动补标点，英文内容会翻译成中文；音频只发给你配置的服务。'
+      : 'YouTube 没有为这个视频提供字幕轨，共享字幕库里也还没有。可以用你自己的 Groq 或 OpenAI Key 做云端识别，识别完会自动翻译；音频只会发给你配置的服务。';
   return (
     <div className="state">
       <CloudDownload size={26} className="accent" />
-      <p className="state-title">{podcast ? '还没有这期播客的字幕' : '该视频没有官方字幕'}</p>
-      <p className="state-sub">
-        {podcast
-          ? '播客没有现成的字幕轨，需要把音频发给你自己的 Groq 或 OpenAI 识别服务来生成。识别完会自动补标点，英文内容会翻译成中文；音频只发给你配置的服务。'
-          : 'YouTube 没有为这个视频提供字幕轨，共享字幕库里也还没有。可以用你自己的 Groq 或 OpenAI Key 做云端识别，识别完会自动翻译；音频只会发给你配置的服务。'}
-      </p>
+      <p className="state-title">{title}</p>
+      <p className="state-sub">{sub}</p>
       {confirming ? (
         <div className="confirm-box">
           <p>会把整段音频发给你配置的识别服务，可能产生费用。继续？</p>
@@ -753,7 +781,7 @@ function NoCaptions({
         <div className="state-actions">
           {asrConfigured ? (
             <button className="btn btn-primary" type="button" onClick={onConfirm}>
-              <CloudDownload size={14} /> {podcast ? '生成字幕' : '用云端识别'}
+              <CloudDownload size={14} /> {podcast ? '生成字幕' : mismatch ? '按语音生成字幕' : '用云端识别'}
             </button>
           ) : null}
           <button className="btn btn-ghost" type="button" onClick={onSettings}>

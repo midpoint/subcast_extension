@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   activeIndex,
+  autoCaptionsMismatch,
   chooseTrack,
   clean,
   clock,
@@ -101,6 +102,13 @@ describe('track choice', () => {
     const tracks = [track('en', true), track('zh-Hans', true), track('es', true)];
     expect(chooseTrack(tracks, 'zh-Hans', 'How I cook rice at home')?.language).toBe('zh-Hans');
     expect(chooseTrack(tracks, 'en', 'How I cook rice at home')?.language).toBe('en');
+  });
+
+  it('flags auto captions that are not in the audio language', () => {
+    expect(autoCaptionsMismatch('en', true, 'zh-Hans')).toBe(true);
+    expect(autoCaptionsMismatch('zh-Hans', true, 'zh')).toBe(false);
+    expect(autoCaptionsMismatch('en', false, 'zh')).toBe(false);
+    expect(autoCaptionsMismatch('en', true, undefined)).toBe(false);
   });
 });
 

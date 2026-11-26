@@ -99,6 +99,21 @@ describe('spoken language detection', () => {
     });
     expect(metaLang(p)).toBe('zh');
   });
+
+  it('uses the uploader-declared default audio language when tracks carry no language', () => {
+    const p = player({
+      videoDetails: { videoId: 'tBMlXQIrYK4', title: 'Chinese talk', lengthSeconds: '60', defaultAudioLanguage: 'zh-Hans' },
+      streamingData: {
+        adaptiveFormats: [{ mimeType: 'audio/mp4', url: 'https://media.example/a.m4a' }],
+      },
+      captions: {
+        playerCaptionsTracklistRenderer: {
+          captionTracks: [{ baseUrl: 'https://youtube.com/api/timedtext?lang=en', languageCode: 'en', kind: 'asr' }],
+        },
+      },
+    });
+    expect(metaLang(p)).toBe('zh');
+  });
 });
 
 describe('WAV chunking', () => {

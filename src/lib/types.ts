@@ -106,7 +106,7 @@ export type JobStatus =
   | { state: 'idle' }
   | { state: 'loading'; step: string }
   | { state: 'ready' }
-  | { state: 'no-captions' }
+  | { state: 'no-captions'; mismatch?: { spoken: string; found: string } }
   | { state: 'translating'; done: number; total: number }
   | { state: 'error'; message: string };
 
