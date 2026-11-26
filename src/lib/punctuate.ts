@@ -1,6 +1,6 @@
-/** Chinese subtitle punctuation. Google (and some models) translates cue by cue, so the Chinese
- *  lines often arrive without sentence punctuation; the user's own model adds it afterwards. The
- *  model may only touch punctuation — a line is kept only when every character survived. */
+/** Chinese subtitle punctuation. YouTube automatic captions (and some machine translations) arrive
+ *  cue by cue without sentence punctuation; the user's own model adds it afterwards. The model may
+ *  only touch punctuation — a line is kept only when every character survived. */
 import { llmJson } from './llm';
 import { batchShape, salvage } from './translate';
 import type { LlmConfig, Segment } from './types';
@@ -25,6 +25,11 @@ export function punctuationTargets(segments: Segment[], items: (string | null)[]
     if (text && !endsWithPunctuation(text)) out.push(i);
   }
   return out;
+}
+
+/** The transcript's own lines as punctuation input (empty cues stay null). */
+export function segmentTexts(segments: Segment[]): (string | null)[] {
+  return segments.map((s) => (s.text.trim() ? s.text : null));
 }
 
 /** Accepts the model's line only when it changed nothing but punctuation/whitespace. */
@@ -61,7 +66,7 @@ export function punctuationBatches(targets: number[], items: (string | null)[], 
 }
 
 // i18n-ignore-start (prompt sent to the model)
-export const PUNCTUATION_RULES = `你在给机器翻译得到的中文字幕补标点。输入 JSON 里 lines 是按时间顺序排列的字幕行，每行是一个 id 和一句中文。
+export const PUNCTUATION_RULES = `你在给中文字幕补标点。输入 JSON 里 lines 是按时间顺序排列的字幕行，每行是一个 id 和一句中文。
 规则：
 1. 只能补充或调整标点符号（，。？！、；：……“”‘’等），中文一律用全角标点。除了标点，绝对不能增加、删除、改写、调换任何字、字母或数字。
 2. 按语义断句：一个完整句子结束时用。？！；句子还没说完时用，或者不加句末标点；不要把一个词拆开。

@@ -94,6 +94,8 @@ export type OffscreenRequest =
       type: 'OFFSCREEN_PUNCTUATE';
       videoId: string;
       llm: LlmConfig;
+      /** Which lines to punctuate: the Chinese transcript itself, or its Chinese translation. */
+      target: 'segments' | 'translation';
     }
   | { type: 'OFFSCREEN_CANCEL'; videoId: string };
 

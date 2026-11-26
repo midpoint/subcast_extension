@@ -5,7 +5,7 @@ import { transcribeAudio } from '../../src/lib/asr';
 import { getEpisode, putEpisode, updateEpisode } from '../../src/lib/db';
 import { llmReady } from '../../src/lib/llm';
 import type { OffscreenRequest } from '../../src/lib/messages';
-import { punctuateItems } from '../../src/lib/punctuate';
+import { punctuateItems, segmentTexts } from '../../src/lib/punctuate';
 import { translateWithGoogle, translateWithLlm } from '../../src/lib/translate';
 import type { EpisodeRecord } from '../../src/lib/types';
 import { EPISODE_KEY } from '../../src/lib/types';
@@ -95,7 +95,7 @@ async function runTranslate(msg: Extract<OffscreenRequest, { type: 'OFFSCREEN_TR
 }
 
 async function runPunctuate(msg: Extract<OffscreenRequest, { type: 'OFFSCREEN_PUNCTUATE' }>): Promise<void> {
-  const { videoId } = msg;
+  const { videoId, target } = msg;
   if (punctuateRuns.has(videoId)) return;
   if (running.has(videoId)) {
     send({ type: 'PU_CANCELLED', videoId });
@@ -108,20 +108,40 @@ async function runPunctuate(msg: Extract<OffscreenRequest, { type: 'OFFSCREEN_PU
   const key = EPISODE_KEY(videoId);
   try {
     const ep = await getEpisode(key);
-    if (!ep?.translation) {
+    if (!ep) {
       send({ type: 'PU_DONE', videoId, changed: 0, total: 0 });
       return;
     }
+    const base = target === 'segments' ? segmentTexts(ep.segments) : ep.translation?.items;
+    if (!base) {
+      send({ type: 'PU_DONE', videoId, changed: 0, total: 0 });
+      return;
+    }
+    // Punctuation never changes cue times, so a changed shape means the transcript was replaced.
+    const sameShape = (a: EpisodeRecord['segments'], b: EpisodeRecord['segments']) =>
+      a.length === b.length && a.every((s, i) => s.start === b[i].start && s.end === b[i].end);
+    const apply = (cur: EpisodeRecord, items: (string | null)[], final: boolean): EpisodeRecord | null => {
+      if (target === 'segments') {
+        if (!sameShape(cur.segments, ep.segments)) return null;
+        return {
+          ...cur,
+          segments: cur.segments.map((s, i) => ({ ...s, text: items[i] ?? s.text })),
+          ...(final ? { punctuatedAt: Date.now() } : {}),
+          updatedAt: Date.now(),
+        };
+      }
+      if (!cur.translation || epochOf(videoId) !== epoch) return null;
+      return {
+        ...cur,
+        translation: { ...cur.translation, items, ...(final ? { punctuatedAt: Date.now() } : {}) },
+        updatedAt: Date.now(),
+      };
+    };
     let saveChain: Promise<unknown> = Promise.resolve();
     const persist = (items: (string | null)[]) => {
-      saveChain = saveChain.then(() =>
-        updateEpisode(key, (cur) => {
-          if (!cur.translation || epochOf(videoId) !== epoch) return cur;
-          return { ...cur, translation: { ...cur.translation, items }, updatedAt: Date.now() };
-        }),
-      );
+      saveChain = saveChain.then(() => updateEpisode(key, (cur) => apply(cur, items, false) ?? cur));
     };
-    const result = await punctuateItems(ep.segments, ep.translation.items, {
+    const result = await punctuateItems(ep.segments, base, {
       cfg: msg.llm,
       signal: controller.signal,
       onProgress: (items, done, total) => {
@@ -130,14 +150,7 @@ async function runPunctuate(msg: Extract<OffscreenRequest, { type: 'OFFSCREEN_PU
       },
     });
     await saveChain;
-    await updateEpisode(key, (cur) => {
-      if (!cur.translation || epochOf(videoId) !== epoch) return cur;
-      return {
-        ...cur,
-        translation: { ...cur.translation, items: result.items, punctuatedAt: Date.now() },
-        updatedAt: Date.now(),
-      };
-    });
+    await updateEpisode(key, (cur) => apply(cur, result.items, true) ?? cur);
     send({ type: 'PU_DONE', videoId, changed: result.changed, total: result.items.length });
   } catch (e) {
     if ((e as Error)?.name === 'AbortError') send({ type: 'PU_CANCELLED', videoId });

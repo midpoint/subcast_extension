@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { endsWithPunctuation, mergePunctuated, punctuationBatches, punctuationTargets } from '../src/lib/punctuate';
+import { endsWithPunctuation, mergePunctuated, punctuationBatches, punctuationTargets, segmentTexts } from '../src/lib/punctuate';
 import type { Segment } from '../src/lib/types';
 
 const segs = (texts: string[]): Segment[] => texts.map((text, i) => ({ start: i, end: i + 1, text }));
@@ -16,6 +16,10 @@ describe('punctuation targets', () => {
   it('only targets translated, non-empty lines without trailing punctuation', () => {
     const segments = segs(['source a', 'source b', 'source c', '']);
     expect(punctuationTargets(segments, [null, '你好', '在吗？', ''])).toEqual([1]);
+  });
+
+  it('turns source cues into punctuation input', () => {
+    expect(segmentTexts(segs(['你好', '', '世界']))).toEqual(['你好', null, '世界']);
   });
 });
 

@@ -69,6 +69,8 @@ export interface EpisodeRecord {
   translation: Translation | null;
   /** Where a cloud transcript came from: model name, ASR provider. */
   asrModel?: string;
+  /** Set when the Chinese transcript's own punctuation pass finished (absent = not tried yet). */
+  punctuatedAt?: number;
   /** When a cloud transcript was successfully shared (avoids uploading twice). */
   uploadedAt?: number;
   createdAt: number;

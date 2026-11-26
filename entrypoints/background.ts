@@ -11,7 +11,7 @@ import { GUIDE_SYSTEM, guidePrompt, qaSystem, transcriptForModel } from '../src/
 import { ASR_PRESETS, getSettings, onSettingsChanged, saveSettings } from '../src/lib/settings';
 import { lookupGuide, lookupTranscript, uploadTranscript, type SharedTranscript } from '../src/lib/shared';
 import { needsTranslation, shouldTranslate } from '../src/lib/translate';
-import { punctuationTargets } from '../src/lib/punctuate';
+import { punctuationTargets, segmentTexts } from '../src/lib/punctuate';
 import type { EpisodeRecord, TabSnapshot, VideoMeta } from '../src/lib/types';
 import { EPISODE_KEY } from '../src/lib/types';
 import { fetchInnerTubeMeta, fetchTrackSegments } from '../src/lib/youtube';
@@ -460,7 +460,7 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
     await putEpisode(rec);
     notifyEpisode(tabId, rec);
     log('captions', key, rec.source, rec.segments.length);
-    maybeAutoTranslate(tabId, rec, settings.autoTranslate);
+    if (!maybeAutoTranslate(tabId, rec, settings.autoTranslate)) void maybePunctuate(rec);
   })().catch((e) => {
     log('pipeline failed', e);
     setStatus(tabId, { state: 'error', message: e instanceof Error ? e.message : String(e) });
@@ -544,11 +544,18 @@ function maybeAutoTranslate(tabId: number, rec: EpisodeRecord, auto: boolean): b
   return true;
 }
 
-/** Adds punctuation to Chinese translation lines that lack it, with the user's own model. */
+/** Chinese transcript punctuation. For a Chinese video the source captions are what the user reads,
+ *  so they are punctuated directly; other languages punctuate the Chinese translation instead. */
 async function maybePunctuate(rec: EpisodeRecord): Promise<void> {
-  const translation = rec.translation;
-  if (!translation || translation.punctuatedAt) return;
-  if (!punctuationTargets(rec.segments, translation.items).length) return;
+  const target: 'segments' | 'translation' = shouldTranslate(rec.language) ? 'translation' : 'segments';
+  if (target === 'segments') {
+    if (rec.punctuatedAt) return;
+    if (!punctuationTargets(rec.segments, segmentTexts(rec.segments)).length) return;
+  } else {
+    const translation = rec.translation;
+    if (!translation || translation.punctuatedAt) return;
+    if (!punctuationTargets(rec.segments, translation.items).length) return;
+  }
   if (punctuating.has(rec.videoId) || translating.has(rec.videoId)) return;
   const settings = await getSettings();
   if (!settings.autoPunctuate || !llmReady(settings.llm)) return;
@@ -556,7 +563,7 @@ async function maybePunctuate(rec: EpisodeRecord): Promise<void> {
   punctuating.add(rec.videoId);
   try {
     await ensureOffscreen();
-    await sendOffscreen({ type: 'OFFSCREEN_PUNCTUATE', videoId: rec.videoId, llm: settings.llm });
+    await sendOffscreen({ type: 'OFFSCREEN_PUNCTUATE', videoId: rec.videoId, llm: settings.llm, target });
   } catch (e) {
     punctuating.delete(rec.videoId);
     log('punctuate start failed', e);
@@ -858,6 +865,7 @@ async function handleOffscreenEvent(msg: OffscreenEvent): Promise<void> {
       } else if (settings.shareTranscripts) {
         void maybeUpload(rec);
       }
+      void maybePunctuate(rec);
     }
     return;
   }
