@@ -7,7 +7,7 @@ import { fetchXimalayaEpisode, ximalayaSoundIdFromUrl } from './ximalaya';
 export const SPOTIFY_DRM_NOTICE =
   'Spotify 的音频使用 DRM 加密，扩展无法下载，也就无法生成字幕或翻译。如果同一档节目也在 Apple Podcasts、小宇宙或喜马拉雅更新，可以在那里打开单集。';
 
-export function podcastUnavailableMessage(site?: string): string {
+export function mediaUnavailableMessage(site?: string): string {
   switch (site) {
     case 'xiaoyuzhou':
       return '这是付费或私有单集，拿不到公开音频，无法生成字幕。';
@@ -17,6 +17,8 @@ export function podcastUnavailableMessage(site?: string): string {
       return '没有拿到这期的公开音频。可能是付费或私密专辑，或者这期节目不在喜马拉雅的公开 RSS 列表里。';
     case 'spotify':
       return SPOTIFY_DRM_NOTICE;
+    case 'x':
+      return '没有拿到这条帖子的视频文件。可能是受保护账号、付费内容、直播，或这条帖子只有 HLS 视频流；也可能是这条帖子不含视频。';
     default:
       return '没有拿到这期的公开音频，无法生成字幕。';
   }

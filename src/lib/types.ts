@@ -38,10 +38,16 @@ export interface AudioFormat {
 }
 
 export type PodcastSite = 'xiaoyuzhou' | 'apple' | 'ximalaya' | 'spotify';
-export type SiteId = 'youtube' | PodcastSite;
+export type SiteId = 'youtube' | 'x' | PodcastSite;
 
 export function isPodcastSite(site: string | null | undefined): site is PodcastSite {
   return site === 'xiaoyuzhou' || site === 'apple' || site === 'ximalaya' || site === 'spotify';
+}
+
+/** Sites whose pages carry no caption track: the transcript always comes from cloud ASR, and the
+ *  audio file may have to be resolved outside the page (podcast catalogues, X's video variants). */
+export function isMediaSite(site: string | null | undefined): site is PodcastSite | 'x' {
+  return isPodcastSite(site) || site === 'x';
 }
 
 /** Everything the watch page (or InnerTube) tells us about the current video. Also used for a
@@ -178,8 +184,8 @@ export interface ExtensionSettings {
 }
 
 /** YouTube ids get the `yt:` prefix the shared service expects; podcast ids (`qm:<eid>`) already
- *  carry the desktop app's key and pass through unchanged. */
-const KEY_PREFIX = /^(?:yt|qm|guid|audio|pod):/;
+ *  carry the desktop app's key and pass through unchanged; X posts use `x:<statusId>`. */
+const KEY_PREFIX = /^(?:yt|qm|guid|audio|pod|x):/;
 
 export const EPISODE_KEY = (videoId: string) => (KEY_PREFIX.test(videoId) ? videoId : `yt:${videoId}`);
 

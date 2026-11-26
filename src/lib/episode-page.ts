@@ -1,7 +1,8 @@
-/** Runs a content script on a podcast episode page. The sites all have the same shape: no caption
- *  tracks, client-side navigation between episodes, and an optional <audio> element the panel can
- *  seek. Each site only supplies URL → id, metadata from its own DOM, and (when available) the
- *  player element; the connection, navigation polling and floating button live here. */
+/** Runs a content script on a page whose media has no caption track (podcast episode, X video
+ *  post). The sites all have the same shape: no caption tracks, client-side navigation between
+ *  episodes, and an optional <audio>/<video> element the panel can seek. Each site only supplies
+ *  URL → id, metadata from its own DOM, and (when available) the player element; the connection,
+ *  navigation polling and floating button live here. */
 import type { ContentEvent } from './messages';
 import type { VideoMeta } from './types';
 
@@ -23,8 +24,8 @@ export interface EpisodePageAdapter {
   /** Reads what the page exposes. Must resolve: fall back to the document title if the DOM has not
    *  rendered yet, because the background fills in the audio URL separately. */
   resolveMeta(videoId: string): Promise<VideoMeta>;
-  /** The site's own player, when it is a plain <audio> element. */
-  audio?: () => HTMLAudioElement | null;
+  /** The site's own player, when it is a plain <audio> or <video> element. */
+  player?: () => HTMLMediaElement | null;
   /** Show the floating "open panel" button (default true). */
   button?: boolean;
 }
@@ -46,15 +47,15 @@ export function serveEpisodePage(page: EpisodePageAdapter): void {
   }
 
   function sendState() {
-    if (!currentId || !port || !page.audio) return;
-    const audio = page.audio();
+    if (!currentId || !port || !page.player) return;
+    const media = page.player();
     try {
       port.postMessage({
         type: 'STATE',
         videoId: currentId,
-        time: audio?.currentTime || 0,
-        duration: Number.isFinite(audio?.duration) ? audio!.duration : meta?.duration || 0,
-        paused: audio?.paused ?? true,
+        time: media?.currentTime || 0,
+        duration: Number.isFinite(media?.duration) ? media!.duration : meta?.duration || 0,
+        paused: media?.paused ?? true,
       });
     } catch {
       /* port closing */
@@ -137,10 +138,10 @@ export function serveEpisodePage(page: EpisodePageAdapter): void {
 
   function onRuntimeMessage(msg: ContentEvent) {
     if (msg.type === 'SEEK') {
-      const audio = page.audio?.();
-      if (!audio) return;
-      audio.currentTime = Math.max(0, msg.seconds);
-      if (audio.paused) void audio.play().catch(() => {});
+      const media = page.player?.();
+      if (!media) return;
+      media.currentTime = Math.max(0, msg.seconds);
+      if (media.paused) void media.play().catch(() => {});
       return;
     }
     if (msg.type === 'RESYNC' && meta) sendMeta();
@@ -157,6 +158,6 @@ export function serveEpisodePage(page: EpisodePageAdapter): void {
     else leave();
   };
   setInterval(follow, 500);
-  if (page.audio) setInterval(sendState, 250);
+  if (page.player) setInterval(sendState, 250);
   follow();
 }

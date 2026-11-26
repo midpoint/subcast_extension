@@ -1,9 +1,10 @@
 /** One place that decides which media a tab URL refers to. YouTube keeps its bare 11-character id
  *  everywhere; Xiaoyuzhou uses `qm:<eid>` (the desktop app's key), the other podcast sites use
- *  `pod:<site>:<id>`. */
+ *  `pod:<site>:<id>`, and X video posts use `x:<statusId>`. */
 import { appleEpisodeIdFromUrl } from './apple';
 import { spotifyEpisodeIdFromUrl } from './spotify';
 import type { SiteId } from './types';
+import { xStatusIdFromUrl } from './x';
 import { episodeIdFromUrl } from './xiaoyuzhou';
 import { ximalayaSoundIdFromUrl } from './ximalaya';
 
@@ -19,6 +20,7 @@ export function siteFromUrl(url: string): SiteId | null {
     if (/(^|\.)podcasts\.apple\.com$/.test(host)) return 'apple';
     if (/(^|\.)ximalaya\.com$/.test(host)) return 'ximalaya';
     if (/(^|\.)spotify\.com$/.test(host)) return 'spotify';
+    if (/(^|\.)(x|twitter)\.com$/.test(host)) return 'x';
   } catch {
     /* not a URL yet (about:blank, chrome://…) */
   }
@@ -33,6 +35,8 @@ export function videoIdFromUrl(url: string): string | null {
       if (u.pathname.startsWith('/shorts/')) return validYoutubeId(u.pathname.split('/')[2]);
       if (u.pathname.startsWith('/live/')) return validYoutubeId(u.pathname.split('/')[2]);
     }
+    const xId = xStatusIdFromUrl(url);
+    if (xId) return `x:${xId}`;
     const eid = episodeIdFromUrl(url);
     if (eid) return `qm:${eid}`;
     const appleId = appleEpisodeIdFromUrl(url);

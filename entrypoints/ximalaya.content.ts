@@ -70,7 +70,7 @@ export default defineContentScript({
         return id ? `pod:xm:${id}` : null;
       },
       resolveMeta: async (videoId) => meta(videoId, await waitForAlbum()),
-      audio: pageAudio,
+      player: pageAudio,
     });
   },
 });

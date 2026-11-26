@@ -6,7 +6,7 @@ export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
     name: 'SubCast · 声渡 — 视频与播客字幕',
-    description: 'YouTube、YouTube Music、小宇宙、Apple Podcasts 与喜马拉雅的双语字幕、AI 导读和带时间戳的 AI 问答。共享字幕优先，没有字幕时可用自己的 Key 走云端识别。',
+    description: 'YouTube、YouTube Music、X（Twitter）视频、小宇宙、Apple Podcasts 与喜马拉雅的双语字幕、AI 导读和带时间戳的 AI 问答。共享字幕优先，没有字幕时可用自己的 Key 走云端识别。',
     // Version comes from package.json (WXT default), so `npm version` is the single source of truth.
     minimum_chrome_version: '116',
     permissions: ['storage', 'unlimitedStorage', 'sidePanel', 'offscreen', 'tabs', 'scripting'],
@@ -20,6 +20,8 @@ export default defineConfig({
       'https://www.ximalaya.com/*',
       'https://*.ximalaya.com/*',
       'https://*.xmcdn.com/*',
+      'https://cdn.syndication.twimg.com/*',
+      'https://video.twimg.com/*',
       'https://subcast.qiaomu.ai/*',
       'https://translate.googleapis.com/*',
       'https://elon.qiaomu.ai/*',

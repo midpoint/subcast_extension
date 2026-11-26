@@ -54,7 +54,7 @@ export default defineContentScript({
         return id ? `pod:ap:${id}` : null;
       },
       resolveMeta: async (videoId) => meta(videoId),
-      audio: pageAudio,
+      player: pageAudio,
     });
   },
 });

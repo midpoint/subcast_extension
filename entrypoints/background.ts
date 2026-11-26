@@ -8,7 +8,7 @@ import { getEpisode, getGuide, putEpisode, putGuide, updateEpisode } from '../sr
 import { isKeyError, llmChat, llmReady } from '../src/lib/llm';
 import { videoIdFromUrl, siteFromUrl } from '../src/lib/media';
 import type { ContentRequest, OffscreenEvent, OffscreenRequest, PanelEvent, PanelRequest } from '../src/lib/messages';
-import { podcastUnavailableMessage, resolvePodcastEpisode, SPOTIFY_DRM_NOTICE } from '../src/lib/podcast';
+import { mediaUnavailableMessage, resolvePodcastEpisode, SPOTIFY_DRM_NOTICE } from '../src/lib/podcast';
 import { GUIDE_SYSTEM, guidePrompt, qaSystem, transcriptForModel } from '../src/lib/prompts';
 import { ASR_PRESETS, getSettings, onSettingsChanged, saveSettings } from '../src/lib/settings';
 import { lookupGuide, lookupTranscript, uploadTranscript, type SharedTranscript } from '../src/lib/shared';
@@ -16,7 +16,8 @@ import { needsTranslation, shouldTranslate } from '../src/lib/translate';
 import { punctuationTargets, segmentTexts } from '../src/lib/punctuate';
 import { punctuateZh } from '../src/lib/zh-punctuation';
 import type { CaptionTrack, EpisodeRecord, TabSnapshot, VideoMeta } from '../src/lib/types';
-import { EPISODE_KEY, isPodcastSite } from '../src/lib/types';
+import { EPISODE_KEY, isMediaSite } from '../src/lib/types';
+import { resolveXEpisode } from '../src/lib/x';
 import { fetchInnerTubeMeta, fetchTrackSegments } from '../src/lib/youtube';
 
 const APP_VERSION = chrome.runtime.getManifest().version;
@@ -423,11 +424,12 @@ function recordKeys(rec: EpisodeRecord | null, videoId: string): string[] {
   return [...new Set([EPISODE_KEY(videoId), ...(rec?.sharedKeys ?? [])])];
 }
 
-/** Apple and Ximalaya pages do not expose the episode's audio file. Fill it in from their public
- *  catalogue and push the filled metadata to the panel before any status that depends on it. */
-async function resolvePodcastForTab(tabId: number, meta: VideoMeta): Promise<VideoMeta> {
+/** Apple, Ximalaya and X pages do not expose a downloadable media file. Fill it in from their
+ *  public catalogue (iTunes, album RSS, X's syndication JSON) and push the filled metadata to the
+ *  panel before any status that depends on it. */
+async function resolveMediaForTab(tabId: number, meta: VideoMeta): Promise<VideoMeta> {
   try {
-    const resolved = await resolvePodcastEpisode(meta);
+    const resolved = meta.site === 'x' ? await resolveXEpisode(meta) : await resolvePodcastEpisode(meta);
     if (!resolved) return meta;
     const { episode, sharedKeys } = resolved;
     const merged: VideoMeta = {
@@ -447,7 +449,7 @@ async function resolvePodcastForTab(tabId: number, meta: VideoMeta): Promise<Vid
     }
     return merged;
   } catch (e) {
-    log('podcast resolve failed', meta.site, meta.videoId, e);
+    log('media resolve failed', meta.site, meta.videoId, e);
     return meta;
   }
 }
@@ -469,13 +471,13 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
       setStatus(tabId, { state: 'unsupported', message: SPOTIFY_DRM_NOTICE });
       return;
     }
-    const podcast = isPodcastSite(meta.site);
+    const mediaSite = isMediaSite(meta.site);
     let current = meta;
-    if (podcast && !current.audioUrl) {
-      setStatus(tabId, { state: 'loading', step: '读取节目信息…' });
-      current = await resolvePodcastForTab(tabId, current);
+    if (mediaSite && !current.audioUrl) {
+      setStatus(tabId, { state: 'loading', step: meta.site === 'x' ? '读取帖子信息…' : '读取节目信息…' });
+      current = await resolveMediaForTab(tabId, current);
     }
-    setStatus(tabId, { state: 'loading', step: settings.useShared ? '查询共享字幕' : podcast ? '准备生成字幕' : '获取 YouTube 字幕' });
+    setStatus(tabId, { state: 'loading', step: settings.useShared ? '查询共享字幕' : mediaSite ? '准备生成字幕' : '获取 YouTube 字幕' });
     if (settings.useShared) {
       const hit = await lookupTranscript(metaKeys(current));
       if (hit && !wrongSharedLanguage(current, hit)) {
@@ -487,10 +489,10 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
         return;
       }
     }
-    if (podcast) {
-      // Podcasts have no caption tracks: the episode's own transcript comes from cloud ASR,
+    if (mediaSite) {
+      // Podcasts and X videos have no caption tracks: the transcript comes from cloud ASR,
       // started by the user because it costs money and uploads audio to their provider.
-      if (!current.audioUrl) setStatus(tabId, { state: 'error', message: podcastUnavailableMessage(current.site) });
+      if (!current.audioUrl) setStatus(tabId, { state: 'error', message: mediaUnavailableMessage(current.site) });
       else setStatus(tabId, { state: 'no-captions' });
       return;
     }
@@ -846,15 +848,15 @@ async function startAsr(tabId: number, meta: VideoMeta): Promise<void> {
   }
   asrJobs.add(videoId);
   try {
-    const podcast = isPodcastSite(meta.site);
+    const mediaSite = isMediaSite(meta.site);
     let current = meta;
-    let audioUrl = podcast ? meta.audioUrl : bestAudio(current.audio)?.url;
-    if (podcast && !audioUrl) {
-      setStatus(tabId, { state: 'loading', step: '读取节目信息…' });
-      current = await resolvePodcastForTab(tabId, meta);
+    let audioUrl = mediaSite ? meta.audioUrl : bestAudio(current.audio)?.url;
+    if (mediaSite && !audioUrl) {
+      setStatus(tabId, { state: 'loading', step: meta.site === 'x' ? '读取帖子信息…' : '读取节目信息…' });
+      current = await resolveMediaForTab(tabId, meta);
       audioUrl = current.audioUrl;
     }
-    if (!audioUrl && !podcast) {
+    if (!audioUrl && !mediaSite) {
       const fresh = await fetchInnerTubeMeta(videoId, meta.url);
       if (fresh) {
         current = { ...current, ...fresh, audio: fresh.audio, tracks: fresh.tracks.length ? fresh.tracks : current.tracks };
@@ -869,13 +871,13 @@ async function startAsr(tabId: number, meta: VideoMeta): Promise<void> {
     }
     if (!audioUrl) {
       throw new Error(
-        podcast
-          ? podcastUnavailableMessage(current.site)
+        mediaSite
+          ? mediaUnavailableMessage(current.site)
           : '拿不到这个视频的音频流（可能是直播、会员或受限制的视频），无法识别。',
       );
     }
     // The offscreen document decodes the whole file into memory; cap very long episodes.
-    if (podcast && current.duration > 3 * 3600) throw new Error('这期节目超过 3 小时，浏览器里解码会占用过多内存，暂时无法识别。');
+    if (mediaSite && current.duration > 3 * 3600) throw new Error('这期内容超过 3 小时，浏览器里解码会占用过多内存，暂时无法识别。');
     const preset = ASR_PRESETS[settings.asrEngine === 'openai' ? 'openai' : 'groq'];
     const model = settings.asrModel.trim() || preset.model;
     setStatus(tabId, { state: 'loading', step: '下载音频…' });

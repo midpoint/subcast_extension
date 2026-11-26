@@ -63,7 +63,7 @@ export default defineContentScript({
         return eid ? `qm:${eid}` : null;
       },
       resolveMeta,
-      audio: mainAudio,
+      player: mainAudio,
     });
   },
 });

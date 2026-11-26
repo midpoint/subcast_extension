@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { appleUrlInfo, pickAppleEpisode } from '../src/lib/apple';
 import { videoIdFromUrl, siteFromUrl } from '../src/lib/media';
-import { podcastUnavailableMessage, transcriptKeys } from '../src/lib/podcast';
+import { mediaUnavailableMessage, transcriptKeys } from '../src/lib/podcast';
 import { decodeEntities, parseDuration } from '../src/lib/rss';
 import { parseIsoDuration, pickSpotifyEpisode, spotifyEpisodeIdFromUrl } from '../src/lib/spotify';
 import { isPodcastSite } from '../src/lib/types';
@@ -147,7 +147,8 @@ describe('Spotify', () => {
   });
 
   it('explains the DRM limitation instead of offering ASR', () => {
-    expect(podcastUnavailableMessage('spotify')).toMatch(/DRM/);
+    expect(mediaUnavailableMessage('spotify')).toMatch(/DRM/);
+    expect(mediaUnavailableMessage('x')).toMatch(/视频文件/);
   });
 });
 

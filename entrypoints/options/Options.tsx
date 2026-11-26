@@ -148,7 +148,7 @@ export default function Options() {
           <span className="logo">声</span>
           <div>
             <h1>SubCast 设置</h1>
-            <p>声渡 Chrome 插件 · YouTube、YouTube Music 与播客的双语字幕、导读与问答</p>
+            <p>声渡 Chrome 插件 · YouTube、YouTube Music、X 视频与播客的双语字幕、导读与问答</p>
           </div>
         </div>
         <div className="top-actions">
@@ -268,7 +268,7 @@ export default function Options() {
 
         <section className="card">
           <h2>云端识别（没有字幕时）</h2>
-          <p className="section-sub">YouTube 没有字幕、共享库里也没有时，或者播客单集（小宇宙、Apple Podcasts、喜马拉雅没有字幕轨），可以把音频发给你自己的识别服务转写；中文视频只有英文自动字幕时也会自动改用这里识别。音频只发给下面选的服务。</p>
+          <p className="section-sub">YouTube 没有字幕、共享库里也没有时，播客单集（小宇宙、Apple Podcasts、喜马拉雅没有字幕轨），或者 X（Twitter）视频帖子，可以把音频发给你自己的识别服务转写；中文视频只有英文自动字幕时也会自动改用这里识别。音频只发给下面选的服务。</p>
           <Field label="识别服务">
             <select
               value={settings.asrEngine}
@@ -310,7 +310,7 @@ export default function Options() {
               </div>
               <div className="inline-note">
                 <Info size={14} />
-                音频按约 8 分钟切块上传（每块小于 25 MB）。会员、直播或受限制的视频可能拿不到音频流；小宇宙的付费/私密单集、喜马拉雅的付费/私密专辑拿不到公开音频。Apple Podcasts 只公开一档节目最近 200 集，较早的单集可能无法生成；Spotify 音频有 DRM 加密，暂不支持。
+                音频按约 8 分钟切块上传（每块小于 25 MB）。会员、直播或受限制的视频可能拿不到音频流；小宇宙的付费/私密单集、喜马拉雅的付费/私密专辑拿不到公开音频。Apple Podcasts 只公开一档节目最近 200 集，较早的单集可能无法生成；X 的受保护账号、付费内容或只有 HLS 视频流的帖子无法识别；Spotify 音频有 DRM 加密，暂不支持。
               </div>
             </>
           )}

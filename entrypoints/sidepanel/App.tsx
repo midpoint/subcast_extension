@@ -16,6 +16,7 @@ import type { PanelEvent, PanelRequest } from '../../src/lib/messages';
 import { requestOrigins } from '../../src/lib/permissions';
 import { getSettings, onSettingsChanged } from '../../src/lib/settings';
 import type { CaptionTrack, ChatTurn, ExtensionSettings, TabSnapshot } from '../../src/lib/types';
+import type { SiteId } from '../../src/lib/types';
 import { EPISODE_KEY, isPodcastSite } from '../../src/lib/types';
 import { needsTranslation, shouldTranslate } from '../../src/lib/translate';
 import ChatView from './ChatView';
@@ -463,7 +464,7 @@ export default function App() {
   const title = snapshot?.meta?.title || episode?.title || '';
   const channel = snapshot?.meta?.channel || episode?.channel || '';
   const duration = snapshot?.meta?.duration || episode?.duration || 0;
-  const isPodcast = isPodcastSite(snapshot?.meta?.site);
+  const site = snapshot?.meta?.site;
   const tracks = snapshot?.meta?.tracks ?? [];
   const trackIndex =
     episode && (episode.source === 'official' || episode.source === 'youtube-auto')
@@ -479,10 +480,10 @@ export default function App() {
         <Header title="" channel="" onSettings={openOptions} />
         <div className="empty">
           <div className="empty-mark">声</div>
-          <p className="state-title">打开一个 YouTube 视频或播客单集</p>
+          <p className="state-title">打开一个 YouTube 视频、X 视频或播客单集</p>
           <p className="state-sub">
-            支持 YouTube、YouTube Music、小宇宙、Apple Podcasts 和喜马拉雅播客：双语字幕、AI 导读和问答。Spotify 的音频有
-            DRM 加密，暂时无法生成字幕；B 站等其他站点暂不支持。
+            支持 YouTube、YouTube Music、X（Twitter）视频、小宇宙、Apple Podcasts 和喜马拉雅播客：双语字幕、AI
+            导读和问答。Spotify 的音频有 DRM 加密，暂时无法生成字幕；B 站等其他站点暂不支持。
           </p>
           <button className="btn btn-ghost" type="button" onClick={openOptions}>
             <Settings size={14} /> 设置
@@ -574,7 +575,7 @@ export default function App() {
 
           {showNoCaptions && (
             <NoCaptions
-              podcast={isPodcast}
+              site={site}
               mismatch={captionMismatch}
               asrConfigured={asrConfigured}
               confirming={confirmAsr}
@@ -749,7 +750,7 @@ function TrackPicker({
 }
 
 function NoCaptions({
-  podcast,
+  site,
   mismatch,
   asrConfigured,
   confirming,
@@ -758,7 +759,7 @@ function NoCaptions({
   onRun,
   onSettings,
 }: {
-  podcast: boolean;
+  site?: SiteId;
   mismatch?: { spoken: string; found: string };
   asrConfigured: boolean;
   confirming: boolean;
@@ -767,16 +768,22 @@ function NoCaptions({
   onRun: () => void;
   onSettings: () => void;
 }) {
+  const podcast = isPodcastSite(site);
+  const xPost = site === 'x';
   const title = mismatch
     ? 'YouTube 自动字幕和语音语言不一致'
     : podcast
       ? '还没有这期播客的字幕'
-      : '该视频没有官方字幕';
+      : xPost
+        ? '这条帖子还没有字幕'
+        : '该视频没有官方字幕';
   const sub = mismatch
     ? `这个视频说的是${languageLabel(mismatch.spoken)}，但 YouTube 只提供了${languageLabel(mismatch.found)}的自动字幕，原文通常和实际语音对不上。可以用你自己的 Groq 或 OpenAI Key 做云端识别，直接按语音生成字幕；音频只发给你配置的服务。`
     : podcast
       ? '播客没有现成的字幕轨，需要把音频发给你自己的 Groq 或 OpenAI 识别服务来生成。识别完会自动补标点（没配模型时用本地规则补句末标点和句间逗号），英文内容会翻译成中文；音频只发给你配置的服务。'
-      : 'YouTube 没有为这个视频提供字幕轨，共享字幕库里也还没有。可以用你自己的 Groq 或 OpenAI Key 做云端识别，识别完会自动翻译；音频只会发给你配置的服务。';
+      : xPost
+        ? 'X 的视频没有字幕轨，需要把音频发给你自己的 Groq 或 OpenAI 识别服务来生成。识别完会自动补标点（没配模型时用本地规则补句末标点和句间逗号），英文内容会翻译成中文；音频只发给你配置的服务。'
+        : 'YouTube 没有为这个视频提供字幕轨，共享字幕库里也还没有。可以用你自己的 Groq 或 OpenAI Key 做云端识别，识别完会自动翻译；音频只会发给你配置的服务。';
   return (
     <div className="state">
       <CloudDownload size={26} className="accent" />
@@ -798,7 +805,7 @@ function NoCaptions({
         <div className="state-actions">
           {asrConfigured ? (
             <button className="btn btn-primary" type="button" onClick={onConfirm}>
-              <CloudDownload size={14} /> {podcast ? '生成字幕' : mismatch ? '按语音生成字幕' : '用云端识别'}
+              <CloudDownload size={14} /> {podcast || xPost ? '生成字幕' : mismatch ? '按语音生成字幕' : '用云端识别'}
             </button>
           ) : null}
           <button className="btn btn-ghost" type="button" onClick={onSettings}>
