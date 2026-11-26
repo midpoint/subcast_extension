@@ -60,18 +60,50 @@ function audioFormats(player: any): AudioFormat[] {
     .sort((a: AudioFormat, b: AudioFormat) => (b.bitrate ?? 0) - (a.bitrate ?? 0));
 }
 
+/** Language of an audio track, from its id (`en.4`, `zh-CN.2`). */
+function audioTrackLang(track: any): string | undefined {
+  const id: string | undefined =
+    typeof track?.audioTrackId === 'string' ? track.audioTrackId : typeof track?.id === 'string' ? track.id : undefined;
+  if (!id) return undefined;
+  const lang = baseLang(id.split('.')[0] ?? id);
+  return /^[a-z]{2,3}$/.test(lang) ? lang : undefined;
+}
+
+/** Display names are localized, so "original" is only a fallback. The default audio track is the
+ *  language the viewer actually hears — for a dubbed video that may be a dub, not the original. */
 function originalLanguage(player: any): string | undefined {
-  const found = new Set<string>();
+  const named = new Set<string>();
+  const all = new Set<string>();
+  let defaultLang: string | undefined;
   for (const key of ['formats', 'adaptiveFormats']) {
     const arr = player?.streamingData?.[key];
     if (!Array.isArray(arr)) continue;
     for (const f of arr) {
-      const name: string | undefined = f?.audioTrack?.displayName;
-      const id: string | undefined = f?.audioTrack?.id;
-      if (name?.toLowerCase().includes('original') && id) found.add(baseLang(id.split('.')[0] ?? id));
+      const track = f?.audioTrack;
+      const lang = audioTrackLang(track);
+      if (!lang) continue;
+      all.add(lang);
+      const name: string = typeof track?.displayName === 'string' ? track.displayName.toLowerCase() : '';
+      if (/original|原始|原聲|原声/.test(name)) named.add(lang);
+      if (track?.audioIsDefault === true) defaultLang ??= lang;
     }
   }
-  return found.size === 1 ? [...found][0] : undefined;
+  const renderer = player?.captions?.playerCaptionsTracklistRenderer;
+  const list = renderer?.audioTracks;
+  if (Array.isArray(list) && list.length) {
+    for (const t of list) {
+      const lang = audioTrackLang(t);
+      if (lang) all.add(lang);
+    }
+    const idx = Number(renderer?.defaultAudioTrackIndex);
+    const pick = Number.isInteger(idx) && idx >= 0 && idx < list.length ? list[idx] : list.find((t: any) => t?.hasDefaultAudioTrack === true);
+    const lang = audioTrackLang(pick);
+    if (lang) return lang;
+  }
+  if (defaultLang) return defaultLang;
+  if (named.size === 1) return [...named][0];
+  // One audio language and several auto-caption languages (dubbing without a default flag).
+  return all.size === 1 ? [...all][0] : undefined;
 }
 
 /** Normalize a `playerResponse` (watch page or InnerTube) into what the extension uses. */

@@ -179,6 +179,7 @@ function handleMeta(tabId: number, meta: VideoMeta) {
       ...meta,
       tracks: meta.tracks.length ? meta.tracks : old.tracks,
       audio: meta.audio.length ? meta.audio : old.audio,
+      originalLanguage: meta.originalLanguage ?? old.originalLanguage,
       title: meta.title || old.title,
       channel: meta.channel || old.channel,
       duration: meta.duration || old.duration,
@@ -387,6 +388,26 @@ function findVideoState(videoId: string): TabSnapshot | null {
 /* Episode pipeline                                                                                 */
 /* ------------------------------------------------------------------------------------------------ */
 
+const langRoot = (lang: string) => (lang.split(/[-_]/)[0] ?? lang).toLowerCase();
+
+/** Older builds fell back to English when the player did not spell "original" in English (localized
+ *  display names, dubbed videos with several auto tracks). When the audio language is now known and
+ *  a matching track exists, replace the cached transcript once. `spokenLanguage` marks the attempt so
+ *  a track that keeps failing to download does not cause a refetch on every open. */
+function wrongCachedTrack(meta: VideoMeta, rec: EpisodeRecord): boolean {
+  if (rec.source !== 'official' && rec.source !== 'youtube-auto') return false;
+  const spoken = meta.originalLanguage ? langRoot(meta.originalLanguage) : '';
+  if (!spoken || langRoot(rec.language) === spoken || rec.spokenLanguage === spoken) return false;
+  return meta.tracks.some((t) => langRoot(t.language) === spoken);
+}
+
+/** A shared transcript in the wrong language hides the track in the language being spoken. */
+function wrongSharedLanguage(meta: VideoMeta, hit: SharedTranscript): boolean {
+  const spoken = meta.originalLanguage ? langRoot(meta.originalLanguage) : '';
+  if (!spoken || langRoot(hit.language) === spoken) return false;
+  return meta.tracks.some((t) => langRoot(t.language) === spoken);
+}
+
 function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<void> {
   const key = EPISODE_KEY(meta.videoId);
   const running = pipelineRuns.get(key);
@@ -394,7 +415,7 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
   const run = (async () => {
     const settings = await getSettings();
     const cached = await getEpisode(key);
-    if (cached && cached.segments.length && !force) {
+    if (cached && cached.segments.length && !force && !wrongCachedTrack(meta, cached)) {
       notifyEpisode(tabId, cached);
       if (!maybeAutoTranslate(tabId, cached, settings.autoTranslate)) void maybePunctuate(cached);
       return;
@@ -402,7 +423,7 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
     setStatus(tabId, { state: 'loading', step: settings.useShared ? '查询共享字幕' : '获取 YouTube 字幕' });
     if (settings.useShared) {
       const hit = await lookupTranscript([key]);
-      if (hit) {
+      if (hit && !wrongSharedLanguage(meta, hit)) {
         const rec = recordFromShared(meta, hit);
         await putEpisode(rec);
         notifyEpisode(tabId, rec);
@@ -423,6 +444,7 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
           ...fresh,
           tracks: fresh.tracks.length ? fresh.tracks : currentMeta.tracks,
           audio: fresh.audio.length ? fresh.audio : currentMeta.audio,
+          originalLanguage: fresh.originalLanguage ?? currentMeta.originalLanguage,
           title: fresh.title || currentMeta.title,
           channel: fresh.channel || currentMeta.channel,
           duration: fresh.duration || currentMeta.duration,
@@ -451,6 +473,7 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
       channel: currentMeta.channel || meta.channel,
       duration: currentMeta.duration || meta.duration,
       language: segments.language,
+      spokenLanguage: currentMeta.originalLanguage,
       source: segments.auto ? 'youtube-auto' : 'official',
       segments: segments.segments,
       translation: null,

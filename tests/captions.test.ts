@@ -96,6 +96,12 @@ describe('track choice', () => {
     expect(scriptHint('Recursive self-improvement has started')).toBeNull();
     expect(scriptHint('ChatGPTの使い方')).toBe('ja');
   });
+
+  it('follows the audio language when a dubbed video has an English title and several auto tracks', () => {
+    const tracks = [track('en', true), track('zh-Hans', true), track('es', true)];
+    expect(chooseTrack(tracks, 'zh-Hans', 'How I cook rice at home')?.language).toBe('zh-Hans');
+    expect(chooseTrack(tracks, 'en', 'How I cook rice at home')?.language).toBe('en');
+  });
 });
 
 describe('clocks and active line', () => {

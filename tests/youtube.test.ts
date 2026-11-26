@@ -43,6 +43,64 @@ describe('player response normalization', () => {
   });
 });
 
+describe('spoken language detection', () => {
+  const player = (over: Record<string, unknown>) => ({
+    videoDetails: { videoId: 'tBMlXQIrYK4', title: 'Cooking show', lengthSeconds: '60' },
+    ...over,
+  });
+  const metaLang = (p: unknown) => metaFromPlayerResponse(p, 'tBMlXQIrYK4', 'https://www.youtube.com/watch?v=tBMlXQIrYK4')?.originalLanguage;
+
+  it('uses the default audio flag even when the track labels are localized', () => {
+    const p = player({
+      streamingData: {
+        adaptiveFormats: [
+          { mimeType: 'audio/mp4', url: 'https://media.example/zh.m4a', audioTrack: { id: 'zh-Hans.2', displayName: '中文（中国）', audioIsDefault: false } },
+          { mimeType: 'audio/mp4', url: 'https://media.example/en.m4a', audioTrack: { id: 'en.1', displayName: '英语', audioIsDefault: false } },
+          { mimeType: 'audio/mp4', url: 'https://media.example/zh2.m4a', audioTrack: { id: 'zh-Hans.3', displayName: '中文（中国）', audioIsDefault: true } },
+        ],
+      },
+    });
+    expect(metaLang(p)).toBe('zh');
+  });
+
+  it('reads the default audio track from the caption renderer when formats have no flag', () => {
+    const p = player({
+      captions: {
+        playerCaptionsTracklistRenderer: {
+          captionTracks: [
+            { baseUrl: 'https://youtube.com/api/timedtext?lang=en', languageCode: 'en', kind: 'asr' },
+            { baseUrl: 'https://youtube.com/api/timedtext?lang=zh', languageCode: 'zh-Hans', kind: 'asr' },
+          ],
+          audioTracks: [
+            { audioTrackId: 'zh-Hans.2', hasDefaultAudioTrack: true, captionTrackIndices: [1] },
+            { audioTrackId: 'en.1', hasDefaultAudioTrack: false, captionTrackIndices: [0] },
+          ],
+          defaultAudioTrackIndex: 0,
+        },
+      },
+      streamingData: {
+        adaptiveFormats: [
+          { mimeType: 'audio/mp4', url: 'https://media.example/zh.m4a', audioTrack: { id: 'zh-Hans.2', displayName: '中文（原始）' } },
+          { mimeType: 'audio/mp4', url: 'https://media.example/en.m4a', audioTrack: { id: 'en.1', displayName: 'English' } },
+        ],
+      },
+    });
+    expect(metaLang(p)).toBe('zh');
+  });
+
+  it('falls back to the single audio language when nothing is marked as default', () => {
+    const p = player({
+      streamingData: {
+        adaptiveFormats: [
+          { mimeType: 'audio/mp4', url: 'https://media.example/a.m4a', audioTrack: { id: 'zh.7', displayName: 'Chinese' } },
+          { mimeType: 'audio/mp4', url: 'https://media.example/b.m4a', audioTrack: { id: 'zh.8', displayName: 'Chinese' } },
+        ],
+      },
+    });
+    expect(metaLang(p)).toBe('zh');
+  });
+});
+
 describe('WAV chunking', () => {
   it('writes a 16-bit mono RIFF/WAVE header at 16 kHz', async () => {
     const samples = new Float32Array(16000).fill(0.25);

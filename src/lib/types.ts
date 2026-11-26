@@ -62,6 +62,8 @@ export interface EpisodeRecord {
   channel: string;
   duration: number;
   language: string;
+  /** Audio-track language the player reported when this transcript was fetched (dedupes refetches). */
+  spokenLanguage?: string;
   source: EpisodeSource;
   /** The shared version's own source (`official`, `cloud`, `whisper`, `qwen3`) when source is `shared`. */
   sharedSource?: string;
