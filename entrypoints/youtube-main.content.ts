@@ -2,7 +2,7 @@
  *  `getPlayerResponse()` only exist there. It forwards the player response to the isolated content
  *  script with postMessage; it never talks to extension APIs. */
 export default defineContentScript({
-  matches: ['https://www.youtube.com/*'],
+  matches: ['https://www.youtube.com/*', 'https://music.youtube.com/*'],
   world: 'MAIN',
   runAt: 'document_start',
   main() {

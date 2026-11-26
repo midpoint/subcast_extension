@@ -91,6 +91,8 @@ export type OffscreenRequest =
       model: string;
       language: string;
       meta: { title: string; channel: string; duration: number };
+      /** Shared-library keys the desktop app also computes (podcast feed guid / audio URL). */
+      sharedKeys?: string[];
     }
   | {
       type: 'OFFSCREEN_PUNCTUATE';

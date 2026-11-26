@@ -37,6 +37,13 @@ export interface AudioFormat {
   audioQuality?: string;
 }
 
+export type PodcastSite = 'xiaoyuzhou' | 'apple' | 'ximalaya' | 'spotify';
+export type SiteId = 'youtube' | PodcastSite;
+
+export function isPodcastSite(site: string | null | undefined): site is PodcastSite {
+  return site === 'xiaoyuzhou' || site === 'apple' || site === 'ximalaya' || site === 'spotify';
+}
+
 /** Everything the watch page (or InnerTube) tells us about the current video. Also used for a
  *  podcast episode page: `audioUrl` is the episode's media file and `tracks` is empty. */
 export interface VideoMeta {
@@ -49,11 +56,25 @@ export interface VideoMeta {
   audio: AudioFormat[];
   /** Direct audio file for cloud ASR when the site is not YouTube (podcast episodes). */
   audioUrl?: string;
-  site?: 'youtube' | 'xiaoyuzhou';
+  site?: SiteId;
+  /** Ximalaya sound pages only link to their album; the background reads that album's RSS feed. */
+  albumId?: string;
+  /** Keys the desktop app also computes for the same episode (`guid:<sha1>`, `audio:<sha1>`), so a
+   *  transcript shared by either app is found whichever client looks it up. */
+  sharedKeys?: string[];
   originalLanguage?: string;
   channelId?: string;
   capturedAt: number;
   origin: 'page' | 'innertube';
+}
+
+/** What a podcast site resolver learns about one episode (audio file, title, duration, feed guid). */
+export interface PodcastEpisode {
+  title: string;
+  channel: string;
+  duration: number;
+  audioUrl?: string;
+  guid?: string;
 }
 
 export type EpisodeSource = 'official' | 'youtube-auto' | 'shared' | 'cloud';
@@ -73,6 +94,8 @@ export interface EpisodeRecord {
   source: EpisodeSource;
   /** The shared version's own source (`official`, `cloud`, `whisper`, `qwen3`) when source is `shared`. */
   sharedSource?: string;
+  /** Extra keys this transcript can be looked up by in the shared library (`guid:`, `audio:`). */
+  sharedKeys?: string[];
   segments: Segment[];
   translation: Translation | null;
   /** Where a cloud transcript came from: model name, ASR provider. */
@@ -107,6 +130,7 @@ export type JobStatus =
   | { state: 'loading'; step: string }
   | { state: 'ready' }
   | { state: 'no-captions'; mismatch?: { spoken: string; found: string } }
+  | { state: 'unsupported'; message: string }
   | { state: 'translating'; done: number; total: number }
   | { state: 'error'; message: string };
 

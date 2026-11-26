@@ -91,7 +91,7 @@ export async function uploadTranscript(ep: EpisodeRecord, opts: UploadOptions): 
       }
     : undefined;
   const body = {
-    keys: [ep.key],
+    keys: [ep.key, ...(ep.sharedKeys ?? [])],
     title: ep.title.slice(0, 300),
     show: ep.channel.slice(0, 300),
     duration,

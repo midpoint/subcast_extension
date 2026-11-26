@@ -21,7 +21,7 @@ function currentVideoId(): string | null {
 }
 
 export default defineContentScript({
-  matches: ['https://www.youtube.com/*'],
+  matches: ['https://www.youtube.com/*', 'https://music.youtube.com/*'],
   runAt: 'document_idle',
   main() {
   let port: chrome.runtime.Port | null = null;

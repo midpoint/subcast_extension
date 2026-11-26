@@ -187,6 +187,7 @@ async function runAsr(msg: Extract<OffscreenRequest, { type: 'OFFSCREEN_ASR' }>)
       duration: Math.max(msg.meta.duration || 0, lastEnd + 1),
       language: result.language,
       source: 'cloud',
+      sharedKeys: msg.sharedKeys,
       segments: result.segments,
       translation: null,
       asrModel: result.model,

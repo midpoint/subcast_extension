@@ -16,7 +16,7 @@ import type { PanelEvent, PanelRequest } from '../../src/lib/messages';
 import { requestOrigins } from '../../src/lib/permissions';
 import { getSettings, onSettingsChanged } from '../../src/lib/settings';
 import type { CaptionTrack, ChatTurn, ExtensionSettings, TabSnapshot } from '../../src/lib/types';
-import { EPISODE_KEY } from '../../src/lib/types';
+import { EPISODE_KEY, isPodcastSite } from '../../src/lib/types';
 import { needsTranslation, shouldTranslate } from '../../src/lib/translate';
 import ChatView from './ChatView';
 import GuideView from './GuideView';
@@ -463,7 +463,7 @@ export default function App() {
   const title = snapshot?.meta?.title || episode?.title || '';
   const channel = snapshot?.meta?.channel || episode?.channel || '';
   const duration = snapshot?.meta?.duration || episode?.duration || 0;
-  const isPodcast = snapshot?.meta?.site === 'xiaoyuzhou';
+  const isPodcast = isPodcastSite(snapshot?.meta?.site);
   const tracks = snapshot?.meta?.tracks ?? [];
   const trackIndex =
     episode && (episode.source === 'official' || episode.source === 'youtube-auto')
@@ -479,8 +479,11 @@ export default function App() {
         <Header title="" channel="" onSettings={openOptions} />
         <div className="empty">
           <div className="empty-mark">声</div>
-          <p className="state-title">打开一个 YouTube 视频或小宇宙播客</p>
-          <p className="state-sub">SubCast 支持 YouTube 视频和小宇宙单集：双语字幕、AI 导读和问答。B 站等其他站点暂不支持。</p>
+          <p className="state-title">打开一个 YouTube 视频或播客单集</p>
+          <p className="state-sub">
+            支持 YouTube、YouTube Music、小宇宙、Apple Podcasts 和喜马拉雅播客：双语字幕、AI 导读和问答。Spotify 的音频有
+            DRM 加密，暂时无法生成字幕；B 站等其他站点暂不支持。
+          </p>
           <button className="btn btn-ghost" type="button" onClick={openOptions}>
             <Settings size={14} /> 设置
           </button>
@@ -492,6 +495,7 @@ export default function App() {
   const showList = Boolean(episode?.segments.length);
   const showLoading = !showList && (status.state === 'loading' || status.state === 'idle');
   const showNoCaptions = !showList && status.state === 'no-captions';
+  const showUnsupported = !showList && status.state === 'unsupported';
   const captionMismatch = status.state === 'no-captions' ? status.mismatch : undefined;
   const showError = !showList && status.state === 'error';
 
@@ -579,6 +583,19 @@ export default function App() {
               onRun={runAsr}
               onSettings={openOptions}
             />
+          )}
+
+          {showUnsupported && (
+            <div className="state">
+              <AlertTriangle size={24} className="warn" />
+              <p className="state-title">这个站点的音频无法生成字幕</p>
+              <p className="state-sub">{status.state === 'unsupported' ? status.message : ''}</p>
+              <div className="state-actions">
+                <button className="btn btn-ghost" type="button" onClick={openOptions}>
+                  <Settings size={14} /> 设置
+                </button>
+              </div>
+            </div>
           )}
 
           {showError && (

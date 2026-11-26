@@ -6,15 +6,16 @@ import { bestAudio } from '../src/lib/asr';
 import { autoCaptionsMismatch, chooseTrack, clean, resegment } from '../src/lib/captions';
 import { getEpisode, getGuide, putEpisode, putGuide, updateEpisode } from '../src/lib/db';
 import { isKeyError, llmChat, llmReady } from '../src/lib/llm';
-import { videoIdFromUrl } from '../src/lib/media';
+import { videoIdFromUrl, siteFromUrl } from '../src/lib/media';
 import type { ContentRequest, OffscreenEvent, OffscreenRequest, PanelEvent, PanelRequest } from '../src/lib/messages';
+import { podcastUnavailableMessage, resolvePodcastEpisode, SPOTIFY_DRM_NOTICE } from '../src/lib/podcast';
 import { GUIDE_SYSTEM, guidePrompt, qaSystem, transcriptForModel } from '../src/lib/prompts';
 import { ASR_PRESETS, getSettings, onSettingsChanged, saveSettings } from '../src/lib/settings';
 import { lookupGuide, lookupTranscript, uploadTranscript, type SharedTranscript } from '../src/lib/shared';
 import { needsTranslation, shouldTranslate } from '../src/lib/translate';
 import { punctuationTargets, segmentTexts } from '../src/lib/punctuate';
 import type { CaptionTrack, EpisodeRecord, TabSnapshot, VideoMeta } from '../src/lib/types';
-import { EPISODE_KEY } from '../src/lib/types';
+import { EPISODE_KEY, isPodcastSite } from '../src/lib/types';
 import { fetchInnerTubeMeta, fetchTrackSegments } from '../src/lib/youtube';
 
 const APP_VERSION = chrome.runtime.getManifest().version;
@@ -39,6 +40,10 @@ function log(...args: unknown[]) {
   console.log('[subcast]', ...args);
 }
 
+function initialStatus(url: string): TabSnapshot['status'] {
+  return siteFromUrl(url) === 'spotify' ? { state: 'unsupported', message: SPOTIFY_DRM_NOTICE } : { state: 'idle' };
+}
+
 function emptySnapshot(tabId: number, url: string): TabSnapshot {
   return {
     tabId,
@@ -48,7 +53,7 @@ function emptySnapshot(tabId: number, url: string): TabSnapshot {
     time: 0,
     duration: 0,
     paused: true,
-    status: { state: 'idle' },
+    status: initialStatus(url),
     revision,
   };
 }
@@ -66,7 +71,7 @@ function ensureTab(tabId: number, url = ''): TabSnapshot {
       st.meta = null;
       st.time = 0;
       st.duration = 0;
-      st.status = { state: 'idle' };
+      st.status = initialStatus(url);
     }
   }
   return st;
@@ -164,6 +169,11 @@ function handleMeta(tabId: number, meta: VideoMeta) {
       tracks: meta.tracks.length ? meta.tracks : old.tracks,
       audio: meta.audio.length ? meta.audio : old.audio,
       originalLanguage: meta.originalLanguage ?? old.originalLanguage,
+      // Resolution results survive a RESYNC from the page, which only knows the DOM.
+      audioUrl: meta.audioUrl ?? old.audioUrl,
+      albumId: meta.albumId ?? old.albumId,
+      sharedKeys: meta.sharedKeys?.length ? meta.sharedKeys : old.sharedKeys,
+      site: meta.site ?? old.site,
       title: meta.title || old.title,
       channel: meta.channel || old.channel,
       duration: meta.duration || old.duration,
@@ -362,7 +372,7 @@ async function handlePanel(port: chrome.runtime.Port, msg: PanelRequest): Promis
     case 'RUN_ASR': {
       const st = findVideoState(msg.videoId);
       if (st?.meta) void startAsr(st.tabId, st.meta);
-      else safePost(port, { type: 'ASR_ERROR', videoId: msg.videoId, message: '还没有读到这个视频的信息，请刷新 YouTube 页面' });
+      else safePost(port, { type: 'ASR_ERROR', videoId: msg.videoId, message: '还没有读到这个页面的信息，请刷新页面' });
       return;
     }
   }
@@ -402,11 +412,49 @@ function wrongSharedLanguage(meta: VideoMeta, hit: SharedTranscript): boolean {
   return meta.tracks.some((t) => langRoot(t.language) === spoken);
 }
 
+/** Keys this episode can be looked up by: the extension's own key plus the desktop app's RSS keys
+ *  (`guid:`, `audio:`), so either client finds a transcript the other shared. */
+function metaKeys(meta: VideoMeta): string[] {
+  return [...new Set([EPISODE_KEY(meta.videoId), ...(meta.sharedKeys ?? [])])];
+}
+
+function recordKeys(rec: EpisodeRecord | null, videoId: string): string[] {
+  return [...new Set([EPISODE_KEY(videoId), ...(rec?.sharedKeys ?? [])])];
+}
+
+/** Apple and Ximalaya pages do not expose the episode's audio file. Fill it in from their public
+ *  catalogue and push the filled metadata to the panel before any status that depends on it. */
+async function resolvePodcastForTab(tabId: number, meta: VideoMeta): Promise<VideoMeta> {
+  try {
+    const resolved = await resolvePodcastEpisode(meta);
+    if (!resolved) return meta;
+    const { episode, sharedKeys } = resolved;
+    const merged: VideoMeta = {
+      ...meta,
+      title: episode.title || meta.title,
+      channel: episode.channel || meta.channel,
+      duration: episode.duration || meta.duration,
+      audioUrl: episode.audioUrl,
+      sharedKeys,
+    };
+    const st = tabStates.get(tabId);
+    if (st && st.videoId === meta.videoId) {
+      st.meta = st.meta ? { ...st.meta, ...merged } : merged;
+      if (merged.duration) st.duration = merged.duration;
+      tabStates.set(tabId, st);
+      broadcastSnapshot(tabId);
+    }
+    return merged;
+  } catch (e) {
+    log('podcast resolve failed', meta.site, meta.videoId, e);
+    return meta;
+  }
+}
+
 function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<void> {
   const key = EPISODE_KEY(meta.videoId);
   const running = pipelineRuns.get(key);
   if (running) return running;
-  const podcast = meta.site === 'xiaoyuzhou';
   const run = (async () => {
     const settings = await getSettings();
     const cached = await getEpisode(key);
@@ -415,11 +463,22 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
       if (!maybeAutoTranslate(tabId, cached, settings.autoTranslate)) void maybePunctuate(cached);
       return;
     }
+    if (meta.site === 'spotify') {
+      // DRM: no audio the extension could download, and no shared library key for it.
+      setStatus(tabId, { state: 'unsupported', message: SPOTIFY_DRM_NOTICE });
+      return;
+    }
+    const podcast = isPodcastSite(meta.site);
+    let current = meta;
+    if (podcast && !current.audioUrl) {
+      setStatus(tabId, { state: 'loading', step: '读取节目信息…' });
+      current = await resolvePodcastForTab(tabId, current);
+    }
     setStatus(tabId, { state: 'loading', step: settings.useShared ? '查询共享字幕' : podcast ? '准备生成字幕' : '获取 YouTube 字幕' });
     if (settings.useShared) {
-      const hit = await lookupTranscript([key]);
-      if (hit && !wrongSharedLanguage(meta, hit)) {
-        const rec = recordFromShared(meta, hit);
+      const hit = await lookupTranscript(metaKeys(current));
+      if (hit && !wrongSharedLanguage(current, hit)) {
+        const rec = recordFromShared(current, hit);
         await putEpisode(rec);
         notifyEpisode(tabId, rec);
         log('shared hit', key, hit.source, hit.segments.length);
@@ -430,7 +489,7 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
     if (podcast) {
       // Podcasts have no caption tracks: the episode's own transcript comes from cloud ASR,
       // started by the user because it costs money and uploads audio to their provider.
-      if (!meta.audioUrl) setStatus(tabId, { state: 'error', message: '这是付费或私有单集，拿不到公开音频，无法生成字幕。' });
+      if (!current.audioUrl) setStatus(tabId, { state: 'error', message: podcastUnavailableMessage(current.site) });
       else setStatus(tabId, { state: 'no-captions' });
       return;
     }
@@ -608,6 +667,7 @@ function recordFromShared(meta: VideoMeta, hit: SharedTranscript): EpisodeRecord
     language: hit.language,
     source: 'shared',
     sharedSource: hit.source,
+    sharedKeys: meta.sharedKeys,
     segments: hit.segments,
     translation: items
       ? {
@@ -730,9 +790,14 @@ async function startAsr(tabId: number, meta: VideoMeta): Promise<void> {
   }
   asrJobs.add(videoId);
   try {
-    const podcast = meta.site === 'xiaoyuzhou';
+    const podcast = isPodcastSite(meta.site);
     let current = meta;
     let audioUrl = podcast ? meta.audioUrl : bestAudio(current.audio)?.url;
+    if (podcast && !audioUrl) {
+      setStatus(tabId, { state: 'loading', step: '读取节目信息…' });
+      current = await resolvePodcastForTab(tabId, meta);
+      audioUrl = current.audioUrl;
+    }
     if (!audioUrl && !podcast) {
       const fresh = await fetchInnerTubeMeta(videoId, meta.url);
       if (fresh) {
@@ -747,7 +812,11 @@ async function startAsr(tabId: number, meta: VideoMeta): Promise<void> {
       }
     }
     if (!audioUrl) {
-      throw new Error(podcast ? '这期节目没有公开音频（可能是付费或私有单集），无法生成字幕。' : '拿不到这个视频的音频流（可能是直播、会员或受限制的视频），无法识别。');
+      throw new Error(
+        podcast
+          ? podcastUnavailableMessage(current.site)
+          : '拿不到这个视频的音频流（可能是直播、会员或受限制的视频），无法识别。',
+      );
     }
     // The offscreen document decodes the whole file into memory; cap very long episodes.
     if (podcast && current.duration > 3 * 3600) throw new Error('这期节目超过 3 小时，浏览器里解码会占用过多内存，暂时无法识别。');
@@ -765,6 +834,7 @@ async function startAsr(tabId: number, meta: VideoMeta): Promise<void> {
       model,
       language: settings.asrLanguage,
       meta: { title: current.title, channel: current.channel, duration: current.duration },
+      sharedKeys: current.sharedKeys,
     });
   } catch (e) {
     asrJobs.delete(videoId);
@@ -789,7 +859,8 @@ async function lookupGuideForPanel(port: chrome.runtime.Port, videoId: string): 
     }
     const settings = await getSettings();
     if (settings.useShared) {
-      const hit = await lookupGuide([key]);
+      const rec = await getEpisode(key);
+      const hit = await lookupGuide(recordKeys(rec, videoId));
       if (hit) {
         await putGuide({ key, text: hit.text, model: 'shared', source: 'shared', createdAt: hit.createdAt ?? Date.now() });
         safePost(port, { type: 'GUIDE', videoId, text: hit.text, source: 'shared' });
@@ -817,7 +888,7 @@ async function generateGuide(port: chrome.runtime.Port, videoId: string, force: 
     }
     const settings = await getSettings();
     if (settings.useShared) {
-      const hit = await lookupGuide([key]);
+      const hit = await lookupGuide(recordKeys(ep, videoId));
       if (hit) {
         await putGuide({ key, text: hit.text, model: 'shared', source: 'shared', createdAt: hit.createdAt ?? Date.now() });
         safePost(port, { type: 'GUIDE', videoId, text: hit.text, source: 'shared' });

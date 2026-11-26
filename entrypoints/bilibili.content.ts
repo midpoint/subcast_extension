@@ -52,8 +52,8 @@ function show() {
     <div class="card" role="status">
       <div class="logo">声</div>
       <div class="copy">
-        <p class="title">SubCast 目前仅支持 YouTube</p>
-        <p class="sub">B 站视频暂不支持字幕、导读和问答。</p>
+        <p class="title">SubCast 还不支持 B 站</p>
+        <p class="sub">B 站视频暂不支持字幕、导读和问答；YouTube、YouTube Music 和播客单集可以用。</p>
       </div>
       <button class="close" type="button">知道了</button>
     </div>`;
