@@ -775,7 +775,7 @@ function NoCaptions({
   const sub = mismatch
     ? `这个视频说的是${languageLabel(mismatch.spoken)}，但 YouTube 只提供了${languageLabel(mismatch.found)}的自动字幕，原文通常和实际语音对不上。可以用你自己的 Groq 或 OpenAI Key 做云端识别，直接按语音生成字幕；音频只发给你配置的服务。`
     : podcast
-      ? '播客没有现成的字幕轨，需要把音频发给你自己的 Groq 或 OpenAI 识别服务来生成。识别完会自动补标点，英文内容会翻译成中文；音频只发给你配置的服务。'
+      ? '播客没有现成的字幕轨，需要把音频发给你自己的 Groq 或 OpenAI 识别服务来生成。识别完会自动补标点（没配模型时用本地规则补句末标点和句间逗号），英文内容会翻译成中文；音频只发给你配置的服务。'
       : 'YouTube 没有为这个视频提供字幕轨，共享字幕库里也还没有。可以用你自己的 Groq 或 OpenAI Key 做云端识别，识别完会自动翻译；音频只会发给你配置的服务。';
   return (
     <div className="state">

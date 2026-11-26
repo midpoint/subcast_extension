@@ -62,6 +62,16 @@ describe('sentence clean-up', () => {
     expect(merged[0].text).toBe('so what we found is that it works');
   });
 
+  it('keeps unpunctuated ASR cues short enough to punctuate per line', () => {
+    const got = resegment([
+      seg(0, 4, '第一段没有标点'),
+      seg(4, 8, '第二段也没有'),
+      seg(8, 12, '第三段同样没有'),
+    ]);
+    expect(got).toHaveLength(2);
+    expect(got[0].text).toBe('第一段没有标点第二段也没有');
+  });
+
   it('splits a timed block by sentence and spreads time by length', () => {
     const got = splitTimed('This is the first sentence. And a second one here? Yes. 第三句中文内容在这里。', 10, 40);
     expect(got).toHaveLength(3);

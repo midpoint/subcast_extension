@@ -14,6 +14,7 @@ import { ASR_PRESETS, getSettings, onSettingsChanged, saveSettings } from '../sr
 import { lookupGuide, lookupTranscript, uploadTranscript, type SharedTranscript } from '../src/lib/shared';
 import { needsTranslation, shouldTranslate } from '../src/lib/translate';
 import { punctuationTargets, segmentTexts } from '../src/lib/punctuate';
+import { punctuateZh } from '../src/lib/zh-punctuation';
 import type { CaptionTrack, EpisodeRecord, TabSnapshot, VideoMeta } from '../src/lib/types';
 import { EPISODE_KEY, isPodcastSite } from '../src/lib/types';
 import { fetchInnerTubeMeta, fetchTrackSegments } from '../src/lib/youtube';
@@ -714,17 +715,31 @@ function maybeAutoTranslate(tabId: number, rec: EpisodeRecord, auto: boolean): b
  *  so they are punctuated directly; other languages punctuate the Chinese translation instead. */
 async function maybePunctuate(rec: EpisodeRecord): Promise<void> {
   const target: 'segments' | 'translation' = shouldTranslate(rec.language) ? 'translation' : 'segments';
+  let targets: number[];
   if (target === 'segments') {
     if (rec.punctuatedAt) return;
-    if (!punctuationTargets(rec.segments, segmentTexts(rec.segments)).length) return;
+    targets = punctuationTargets(rec.segments, segmentTexts(rec.segments));
+    if (!targets.length) return;
   } else {
     const translation = rec.translation;
     if (!translation || translation.punctuatedAt) return;
-    if (!punctuationTargets(rec.segments, translation.items).length) return;
+    targets = punctuationTargets(rec.segments, translation.items);
+    if (!targets.length) return;
   }
   if (punctuating.has(rec.videoId) || translating.has(rec.videoId)) return;
   const settings = await getSettings();
-  if (!settings.autoPunctuate || !llmReady(settings.llm)) return;
+  if (!settings.autoPunctuate) return;
+  if (!llmReady(settings.llm)) {
+    // A model gives the best punctuation, but cloud ASR without one must not leave the transcript
+    // unpunctuated: fill in sentence ends and clear clause boundaries locally.
+    punctuating.add(rec.videoId);
+    try {
+      await localPunctuate(rec, target, targets);
+    } finally {
+      punctuating.delete(rec.videoId);
+    }
+    return;
+  }
   if (punctuating.has(rec.videoId) || translating.has(rec.videoId)) return;
   punctuating.add(rec.videoId);
   try {
@@ -734,6 +749,47 @@ async function maybePunctuate(rec: EpisodeRecord): Promise<void> {
     punctuating.delete(rec.videoId);
     log('punctuate start failed', e);
   }
+}
+
+/** The no-model punctuation pass. `targets` are the line indices that still lack punctuation. */
+async function localPunctuate(rec: EpisodeRecord, target: 'segments' | 'translation', targets: number[]): Promise<void> {
+  const wanted = new Set(targets);
+  const fix = (text: string) => punctuateZh(text);
+  if (target === 'segments') {
+    const next = rec.segments.map((s, i) => (wanted.has(i) ? { ...s, text: fix(s.text) } : s));
+    if (next.every((s, i) => s.text === rec.segments[i].text)) return;
+    await updateEpisode(rec.key, (cur) => {
+      if (cur.segments.length !== rec.segments.length) return cur;
+      return {
+        ...cur,
+        segments: cur.segments.map((s, i) => (wanted.has(i) ? { ...s, text: fix(s.text) } : s)),
+        punctuatedAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+    });
+  } else {
+    const tr = rec.translation;
+    if (!tr) return;
+    const items = tr.items.map((text, i) => (wanted.has(i) && text ? fix(text) : text));
+    if (items.every((text, i) => text === tr.items[i])) return;
+    await updateEpisode(rec.key, (cur) => {
+      if (!cur.translation || cur.translation.items.length !== tr.items.length) return cur;
+      return {
+        ...cur,
+        translation: {
+          ...cur.translation,
+          items: cur.translation.items.map((text, i) => (wanted.has(i) && text ? fix(text) : text)),
+          punctuatedAt: Date.now(),
+        },
+        updatedAt: Date.now(),
+      };
+    });
+  }
+  revision++;
+  broadcast({ type: 'EPISODE_UPDATED', videoId: rec.videoId, revision });
+  const st = findVideoState(rec.videoId);
+  if (st) scheduleSubtitles(st.tabId);
+  log('local punctuation', rec.videoId, target, targets.length);
 }
 
 /* ------------------------------------------------------------------------------------------------ */

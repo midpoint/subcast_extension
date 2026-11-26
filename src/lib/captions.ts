@@ -137,7 +137,9 @@ const endsSentence = (t: string) => /[.?!。？！…"”]$/.test(t.trimEnd());
 /** Joins caption fragments into sentence-sized blocks at sentence ends, long pauses, or a size limit. */
 export function resegment(segments: Segment[]): Segment[] {
   const punctuated = segments.filter((s) => endsSentence(s.text)).length * 6 >= Math.max(segments.length, 1);
-  const [maxLen, maxSecs] = punctuated ? [320, 30] : [180, 12];
+  // Unpunctuated ASR must stay close to its own pause-delimited cues: a 12 s merge reads as one
+  // long run-on once punctuation is applied, and the ASR boundaries are the only signal we have.
+  const [maxLen, maxSecs] = punctuated ? [320, 30] : [90, 8];
   const out: Segment[] = [];
   let cur: Segment | null = null;
   const isCjk = (t: string) => {
