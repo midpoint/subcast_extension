@@ -10,7 +10,7 @@
 
 这个仓库是它的 **Chrome 浏览器实现**：不安装桌面程序，打开 YouTube 网页就能在侧边栏看到同一套双语字幕、导读和问答。代码按浏览器扩展的边界重写，不是把桌面版打包进浏览器：
 
-- 内容脚本只在 `https://www.youtube.com/*` 上运行，**不发任何跨域请求**；
+- 内容脚本只在 `https://www.youtube.com/*` 上运行，**不发任何跨域请求**；B 站等其他站点暂不支持，B 站视频页会提示一次「目前仅支持 YouTube」；
 - 所有网络请求由 background service worker 统一发起；
 - 翻译、云端识别这类长任务放进 offscreen document，避免 MV3 worker 被回收；
 - 字幕、译文、导读、问答存在 IndexedDB，设置和 Key 存在 `chrome.storage.local`；
@@ -78,6 +78,7 @@ npm run build
 | `offscreen` | 整集翻译、云端识别的长任务 |
 | `tabs` / `scripting` | 跟踪当前 YouTube 标签页、向内容脚本发消息 |
 | `https://www.youtube.com/*` | 读页面里的播放器信息、取字幕和音频格式 |
+| `https://www.bilibili.com/*` | 只在 B 站视频页显示一次「目前仅支持 YouTube」的提示，不读取页面内容 |
 | `https://*.googlevideo.com/*` | 只在用户开启云端识别时下载音频 |
 | `https://subcast.qiaomu.ai/*` | 共享字幕 / 共享导读的查询与上传 |
 | `https://translate.googleapis.com/*`、`https://elon.qiaomu.ai/*` | Google 翻译及中国大陆中转 |

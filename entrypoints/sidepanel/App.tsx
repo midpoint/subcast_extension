@@ -430,7 +430,7 @@ export default function App() {
         <div className="empty">
           <div className="empty-mark">声</div>
           <p className="state-title">在 YouTube 打开一个视频</p>
-          <p className="state-sub">SubCast 会在侧边栏显示双语字幕、AI 导读和问答。点工具栏上的图标可以随时打开或收起。</p>
+          <p className="state-sub">SubCast 目前只支持 YouTube；B 站等其他站点暂不支持。在 YouTube 视频页，侧边栏会显示双语字幕、AI 导读和问答。</p>
           <button className="btn btn-ghost" type="button" onClick={openOptions}>
             <Settings size={14} /> 设置
           </button>
