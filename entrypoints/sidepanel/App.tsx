@@ -13,8 +13,9 @@ import { clock } from '../../src/lib/captions';
 import { getChat, getEpisode, getGuide, putChat } from '../../src/lib/db';
 import { llmReady } from '../../src/lib/llm';
 import type { PanelEvent, PanelRequest } from '../../src/lib/messages';
+import { requestOrigins } from '../../src/lib/permissions';
 import { getSettings, onSettingsChanged } from '../../src/lib/settings';
-import type { ChatTurn, ExtensionSettings, TabSnapshot } from '../../src/lib/types';
+import type { CaptionTrack, ChatTurn, ExtensionSettings, TabSnapshot } from '../../src/lib/types';
 import { EPISODE_KEY } from '../../src/lib/types';
 import { needsTranslation, shouldTranslate } from '../../src/lib/translate';
 import ChatView from './ChatView';
@@ -58,6 +59,7 @@ export default function App() {
   const [pendingChat, setPendingChat] = useState<string | null>(null);
   const [chatError, setChatError] = useState('');
   const [confirmAsr, setConfirmAsr] = useState(false);
+  const [trackLoading, setTrackLoading] = useState(false);
   const debugTabId = useMemo(() => {
     const n = Number(new URLSearchParams(location.search).get('tabId'));
     return Number.isFinite(n) && n > 0 ? n : undefined;
@@ -146,6 +148,7 @@ export default function App() {
     pendingRef.current = null;
     setChatError('');
     setConfirmAsr(false);
+    setTrackLoading(false);
     setTime(snapshotRef.current?.time ?? 0);
     setFollow(true);
     if (!videoId) return;
@@ -185,7 +188,10 @@ export default function App() {
           }
           break;
         case 'EPISODE_UPDATED':
-          if (msg.videoId === videoIdRef.current) reloadEpisode(msg.videoId);
+          if (msg.videoId === videoIdRef.current) {
+            setTrackLoading(false);
+            reloadEpisode(msg.videoId);
+          }
           break;
         case 'TRANSLATE_PROGRESS':
           if (msg.videoId === videoIdRef.current) {
@@ -194,6 +200,7 @@ export default function App() {
           }
           break;
         case 'TOAST':
+          setTrackLoading(false);
           setToast({ kind: msg.kind, message: msg.message });
           break;
         case 'GUIDE':
@@ -400,10 +407,29 @@ export default function App() {
     void chrome.runtime.openOptionsPage();
   }, []);
 
-  const runAsr = useCallback(() => {
+  const runAsr = useCallback(async () => {
     if (!videoId) return;
+    const audioUrl = snapshotRef.current?.meta?.audioUrl;
+    if (audioUrl) {
+      const granted = await requestOrigins([audioUrl]);
+      if (!granted) {
+        setToast({ kind: 'error', message: '需要允许扩展访问音频地址，才能把音频发给你配置的识别服务。' });
+        return;
+      }
+    }
     post({ type: 'RUN_ASR', videoId });
   }, [videoId, post]);
+
+  const pickTrack = useCallback(
+    (index: number) => {
+      const vid = videoIdRef.current;
+      const track = snapshotRef.current?.meta?.tracks[index];
+      if (!vid || !track) return;
+      setTrackLoading(true);
+      post({ type: 'LOAD_TRACK', videoId: vid, track });
+    },
+    [post],
+  );
 
   /* ---------------------------------------------------------------- derived view data */
   const status = snapshot?.status ?? { state: 'idle' as const };
@@ -419,6 +445,12 @@ export default function App() {
   const title = snapshot?.meta?.title || episode?.title || '';
   const channel = snapshot?.meta?.channel || episode?.channel || '';
   const duration = snapshot?.meta?.duration || episode?.duration || 0;
+  const isPodcast = snapshot?.meta?.site === 'xiaoyuzhou';
+  const tracks = snapshot?.meta?.tracks ?? [];
+  const trackIndex =
+    episode && (episode.source === 'official' || episode.source === 'youtube-auto')
+      ? tracks.findIndex((t) => t.language === episode.language && t.auto === (episode.source === 'youtube-auto'))
+      : -1;
 
   const tabCount = useMemo(() => episode?.segments.length ?? 0, [episode]);
 
@@ -429,8 +461,8 @@ export default function App() {
         <Header title="" channel="" onSettings={openOptions} />
         <div className="empty">
           <div className="empty-mark">声</div>
-          <p className="state-title">在 YouTube 打开一个视频</p>
-          <p className="state-sub">SubCast 目前只支持 YouTube；B 站等其他站点暂不支持。在 YouTube 视频页，侧边栏会显示双语字幕、AI 导读和问答。</p>
+          <p className="state-title">打开一个 YouTube 视频或小宇宙播客</p>
+          <p className="state-sub">SubCast 支持 YouTube 视频和小宇宙单集：双语字幕、AI 导读和问答。B 站等其他站点暂不支持。</p>
           <button className="btn btn-ghost" type="button" onClick={openOptions}>
             <Settings size={14} /> 设置
           </button>
@@ -488,6 +520,9 @@ export default function App() {
             <div className="meta-row">
               <span className={`badge ${episode.source === 'shared' ? 'badge-shared' : ''}`}>{sourceLabel}</span>
               <span className="badge muted-badge">{episode.language.toUpperCase()}</span>
+              {tracks.length > 0 && (
+                <TrackPicker tracks={tracks} value={trackIndex} busy={trackLoading} onPick={pickTrack} />
+              )}
               {duration > 0 && <span className="muted small">{clock(duration)}</span>}
               <span className="grow" />
               {translating ? (
@@ -495,7 +530,7 @@ export default function App() {
                   <Loader2 size={12} className="spin" /> {status.state === 'translating' ? `${status.done}/${status.total}` : '翻译中'}
                 </span>
               ) : isChinese ? (
-                <span className="muted small">中文视频</span>
+                <span className="muted small">中文内容</span>
               ) : incomplete && episode.segments.length ? (
                 <button className="btn btn-mini" type="button" onClick={translate}>
                   {episode.translation ? '继续翻译' : '翻译成中文'}
@@ -516,6 +551,7 @@ export default function App() {
 
           {showNoCaptions && (
             <NoCaptions
+              podcast={isPodcast}
               asrConfigured={asrConfigured}
               confirming={confirmAsr}
               onConfirm={() => setConfirmAsr(true)}
@@ -530,6 +566,9 @@ export default function App() {
               <AlertTriangle size={24} className="warn" />
               <p className="state-title">字幕加载失败</p>
               <p className="state-sub">{status.state === 'error' ? status.message : ''}</p>
+              {tracks.length > 0 && (
+                <TrackPicker tracks={tracks} value={trackIndex} busy={trackLoading} onPick={pickTrack} />
+              )}
               <div className="state-actions">
                 <button className="btn btn-ghost" type="button" onClick={retryLoad}>
                   <RefreshCw size={14} /> 重试
@@ -636,7 +675,44 @@ function Skeleton({ step }: { step: string }) {
   );
 }
 
+function TrackPicker({
+  tracks,
+  value,
+  busy,
+  onPick,
+}: {
+  tracks: CaptionTrack[];
+  value: number;
+  busy: boolean;
+  onPick: (index: number) => void;
+}) {
+  return (
+    <span className="track-pick" title="字幕不对？手动换一条字幕轨">
+      {busy && <Loader2 size={12} className="spin" />}
+      <select
+        value={value >= 0 ? String(value) : ''}
+        disabled={busy}
+        onChange={(e) => {
+          const index = Number(e.target.value);
+          if (Number.isInteger(index) && index >= 0) onPick(index);
+        }}
+      >
+        <option value="" disabled>
+          选择字幕…
+        </option>
+        {tracks.map((t, i) => (
+          <option key={`${t.language}-${t.auto ? 'auto' : 'manual'}-${i}`} value={String(i)}>
+            {t.name}
+            {t.auto ? '（自动生成）' : ''}
+          </option>
+        ))}
+      </select>
+    </span>
+  );
+}
+
 function NoCaptions({
+  podcast,
   asrConfigured,
   confirming,
   onConfirm,
@@ -644,6 +720,7 @@ function NoCaptions({
   onRun,
   onSettings,
 }: {
+  podcast: boolean;
   asrConfigured: boolean;
   confirming: boolean;
   onConfirm: () => void;
@@ -654,9 +731,11 @@ function NoCaptions({
   return (
     <div className="state">
       <CloudDownload size={26} className="accent" />
-      <p className="state-title">该视频没有官方字幕</p>
+      <p className="state-title">{podcast ? '还没有这期播客的字幕' : '该视频没有官方字幕'}</p>
       <p className="state-sub">
-        YouTube 没有为这个视频提供字幕轨，共享字幕库里也还没有。可以用你自己的 Groq 或 OpenAI Key 做云端识别，识别完会自动翻译；音频只会发给你配置的服务。
+        {podcast
+          ? '播客没有现成的字幕轨，需要把音频发给你自己的 Groq 或 OpenAI 识别服务来生成。识别完会自动补标点，英文内容会翻译成中文；音频只发给你配置的服务。'
+          : 'YouTube 没有为这个视频提供字幕轨，共享字幕库里也还没有。可以用你自己的 Groq 或 OpenAI Key 做云端识别，识别完会自动翻译；音频只会发给你配置的服务。'}
       </p>
       {confirming ? (
         <div className="confirm-box">
@@ -674,7 +753,7 @@ function NoCaptions({
         <div className="state-actions">
           {asrConfigured ? (
             <button className="btn btn-primary" type="button" onClick={onConfirm}>
-              <CloudDownload size={14} /> 用云端识别
+              <CloudDownload size={14} /> {podcast ? '生成字幕' : '用云端识别'}
             </button>
           ) : null}
           <button className="btn btn-ghost" type="button" onClick={onSettings}>

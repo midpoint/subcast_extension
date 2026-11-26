@@ -6,13 +6,14 @@ import { bestAudio } from '../src/lib/asr';
 import { chooseTrack, clean, resegment } from '../src/lib/captions';
 import { getEpisode, getGuide, putEpisode, putGuide, updateEpisode } from '../src/lib/db';
 import { isKeyError, llmChat, llmReady } from '../src/lib/llm';
+import { videoIdFromUrl } from '../src/lib/media';
 import type { ContentRequest, OffscreenEvent, OffscreenRequest, PanelEvent, PanelRequest } from '../src/lib/messages';
 import { GUIDE_SYSTEM, guidePrompt, qaSystem, transcriptForModel } from '../src/lib/prompts';
 import { ASR_PRESETS, getSettings, onSettingsChanged, saveSettings } from '../src/lib/settings';
 import { lookupGuide, lookupTranscript, uploadTranscript, type SharedTranscript } from '../src/lib/shared';
 import { needsTranslation, shouldTranslate } from '../src/lib/translate';
 import { punctuationTargets, segmentTexts } from '../src/lib/punctuate';
-import type { EpisodeRecord, TabSnapshot, VideoMeta } from '../src/lib/types';
+import type { CaptionTrack, EpisodeRecord, TabSnapshot, VideoMeta } from '../src/lib/types';
 import { EPISODE_KEY } from '../src/lib/types';
 import { fetchInnerTubeMeta, fetchTrackSegments } from '../src/lib/youtube';
 
@@ -36,23 +37,6 @@ let revision = 0;
 
 function log(...args: unknown[]) {
   console.log('[subcast]', ...args);
-}
-
-export function videoIdFromUrl(url: string): string | null {
-  try {
-    const u = new URL(url);
-    if (!/(^|\.)youtube\.com$/.test(u.hostname)) return null;
-    if (u.pathname === '/watch') return validId(u.searchParams.get('v'));
-    if (u.pathname.startsWith('/shorts/')) return validId(u.pathname.split('/')[2]);
-    if (u.pathname.startsWith('/live/')) return validId(u.pathname.split('/')[2]);
-  } catch {
-    /* not a URL */
-  }
-  return null;
-}
-
-function validId(id: string | null | undefined): string | null {
-  return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
 }
 
 function emptySnapshot(tabId: number, url: string): TabSnapshot {
@@ -324,6 +308,11 @@ async function handlePanel(port: chrome.runtime.Port, msg: PanelRequest): Promis
       await ensureEpisode(tabId, st.meta, msg.force);
       return;
     }
+    case 'LOAD_TRACK': {
+      const st = findVideoState(msg.videoId);
+      if (st) await loadTrack(st.tabId, msg.videoId, msg.track);
+      return;
+    }
     case 'TRANSLATE': {
       const st = findVideoState(msg.videoId);
       const rec = await getEpisode(EPISODE_KEY(msg.videoId));
@@ -395,6 +384,7 @@ const langRoot = (lang: string) => (lang.split(/[-_]/)[0] ?? lang).toLowerCase()
  *  a matching track exists, replace the cached transcript once. `spokenLanguage` marks the attempt so
  *  a track that keeps failing to download does not cause a refetch on every open. */
 function wrongCachedTrack(meta: VideoMeta, rec: EpisodeRecord): boolean {
+  if (rec.manualTrack) return false;
   if (rec.source !== 'official' && rec.source !== 'youtube-auto') return false;
   const spoken = meta.originalLanguage ? langRoot(meta.originalLanguage) : '';
   if (!spoken || langRoot(rec.language) === spoken || rec.spokenLanguage === spoken) return false;
@@ -412,6 +402,7 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
   const key = EPISODE_KEY(meta.videoId);
   const running = pipelineRuns.get(key);
   if (running) return running;
+  const podcast = meta.site === 'xiaoyuzhou';
   const run = (async () => {
     const settings = await getSettings();
     const cached = await getEpisode(key);
@@ -420,7 +411,7 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
       if (!maybeAutoTranslate(tabId, cached, settings.autoTranslate)) void maybePunctuate(cached);
       return;
     }
-    setStatus(tabId, { state: 'loading', step: settings.useShared ? '查询共享字幕' : '获取 YouTube 字幕' });
+    setStatus(tabId, { state: 'loading', step: settings.useShared ? '查询共享字幕' : podcast ? '准备生成字幕' : '获取 YouTube 字幕' });
     if (settings.useShared) {
       const hit = await lookupTranscript([key]);
       if (hit && !wrongSharedLanguage(meta, hit)) {
@@ -431,6 +422,13 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
         if (!maybeAutoTranslate(tabId, rec, settings.autoTranslate)) void maybePunctuate(rec);
         return;
       }
+    }
+    if (podcast) {
+      // Podcasts have no caption tracks: the episode's own transcript comes from cloud ASR,
+      // started by the user because it costs money and uploads audio to their provider.
+      if (!meta.audioUrl) setStatus(tabId, { state: 'error', message: '这是付费或私有单集，拿不到公开音频，无法生成字幕。' });
+      else setStatus(tabId, { state: 'no-captions' });
+      return;
     }
     setStatus(tabId, { state: 'loading', step: '获取 YouTube 字幕' });
     let currentMeta = meta;
@@ -507,6 +505,55 @@ async function fetchFromTracks(meta: VideoMeta): Promise<{ segments: EpisodeReco
     }
   }
   return { segments: [], language: 'en', auto: false, tried };
+}
+
+/** Fetches the caption track the user picked by hand and makes it the episode's transcript. */
+async function loadTrack(tabId: number, videoId: string, track: CaptionTrack): Promise<void> {
+  const key = EPISODE_KEY(videoId);
+  const running = pipelineRuns.get(key);
+  if (running) await running.catch(() => {});
+  setStatus(tabId, { state: 'loading', step: '获取所选字幕' });
+  try {
+    const raw = await fetchTrackSegments(track);
+    const segments = resegment(clean(raw));
+    if (!segments.length) throw new Error('这条字幕下载失败，换一条试试。');
+    if (translating.has(videoId) || punctuating.has(videoId)) {
+      translating.delete(videoId);
+      punctuating.delete(videoId);
+      try {
+        await ensureOffscreen();
+        await sendOffscreen({ type: 'OFFSCREEN_CANCEL', videoId });
+      } catch {
+        /* no offscreen job to cancel */
+      }
+    }
+    const prev = await getEpisode(key);
+    const meta = findVideoState(videoId)?.meta;
+    const rec: EpisodeRecord = {
+      key,
+      videoId,
+      title: prev?.title || meta?.title || '',
+      channel: prev?.channel || meta?.channel || '',
+      duration: prev?.duration || meta?.duration || 0,
+      language: track.language,
+      spokenLanguage: meta?.originalLanguage,
+      manualTrack: true,
+      source: track.auto ? 'youtube-auto' : 'official',
+      segments,
+      translation: null,
+      createdAt: prev?.createdAt ?? Date.now(),
+      updatedAt: Date.now(),
+    };
+    await putEpisode(rec);
+    notifyEpisode(tabId, rec);
+    log('manual track', key, track.language, rec.segments.length);
+    const settings = await getSettings();
+    if (!maybeAutoTranslate(tabId, rec, settings.autoTranslate)) void maybePunctuate(rec);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    setStatus(tabId, { state: 'error', message });
+    broadcast({ type: 'TOAST', kind: 'error', message });
+  }
 }
 
 function recordFromShared(meta: VideoMeta, hit: SharedTranscript): EpisodeRecord {
@@ -647,9 +694,10 @@ async function startAsr(tabId: number, meta: VideoMeta): Promise<void> {
   }
   asrJobs.add(videoId);
   try {
+    const podcast = meta.site === 'xiaoyuzhou';
     let current = meta;
-    let audio = bestAudio(current.audio);
-    if (!audio) {
+    let audioUrl = podcast ? meta.audioUrl : bestAudio(current.audio)?.url;
+    if (!audioUrl && !podcast) {
       const fresh = await fetchInnerTubeMeta(videoId, meta.url);
       if (fresh) {
         current = { ...current, ...fresh, audio: fresh.audio, tracks: fresh.tracks.length ? fresh.tracks : current.tracks };
@@ -659,10 +707,14 @@ async function startAsr(tabId: number, meta: VideoMeta): Promise<void> {
           tabStates.set(tabId, st);
           broadcastSnapshot(tabId);
         }
-        audio = bestAudio(current.audio);
+        audioUrl = bestAudio(current.audio)?.url;
       }
     }
-    if (!audio) throw new Error('拿不到这个视频的音频流（可能是直播、会员或受限制的视频），无法识别。');
+    if (!audioUrl) {
+      throw new Error(podcast ? '这期节目没有公开音频（可能是付费或私有单集），无法生成字幕。' : '拿不到这个视频的音频流（可能是直播、会员或受限制的视频），无法识别。');
+    }
+    // The offscreen document decodes the whole file into memory; cap very long episodes.
+    if (podcast && current.duration > 3 * 3600) throw new Error('这期节目超过 3 小时，浏览器里解码会占用过多内存，暂时无法识别。');
     const preset = ASR_PRESETS[settings.asrEngine === 'openai' ? 'openai' : 'groq'];
     const model = settings.asrModel.trim() || preset.model;
     setStatus(tabId, { state: 'loading', step: '下载音频…' });
@@ -671,7 +723,7 @@ async function startAsr(tabId: number, meta: VideoMeta): Promise<void> {
     await sendOffscreen({
       type: 'OFFSCREEN_ASR',
       videoId,
-      audioUrl: audio.url,
+      audioUrl,
       provider: settings.asrEngine === 'openai' ? 'openai' : 'groq',
       apiKey: settings.asrKey,
       model,
@@ -719,7 +771,7 @@ async function generateGuide(port: chrome.runtime.Port, videoId: string, force: 
   try {
     if (guideJobs.has(videoId)) throw new Error('导读正在生成，请稍等');
     const ep = await getEpisode(key);
-    if (!ep) throw new Error('这个视频还没有字幕，无法生成导读');
+    if (!ep) throw new Error('还没有字幕，无法生成导读');
     if (!force) {
       const cached = await getGuide(key);
       if (cached) {
@@ -775,7 +827,7 @@ async function handleChat(
     const settings = await getSettings();
     if (!llmReady(settings.llm)) throw new Error('AI 问答需要模型服务。请到设置里填写 DeepSeek（或其他 OpenAI 兼容服务）的 Key。');
     const ep = await getEpisode(EPISODE_KEY(videoId));
-    if (!ep) throw new Error('这个视频还没有字幕，无法问答');
+    if (!ep) throw new Error('还没有字幕，无法问答');
     const transcript = transcriptForModel(ep.segments, ep.translation?.items);
     let full = '';
     await llmChat(settings.llm, {

@@ -37,7 +37,8 @@ export interface AudioFormat {
   audioQuality?: string;
 }
 
-/** Everything the watch page (or InnerTube) tells us about the current video. */
+/** Everything the watch page (or InnerTube) tells us about the current video. Also used for a
+ *  podcast episode page: `audioUrl` is the episode's media file and `tracks` is empty. */
 export interface VideoMeta {
   videoId: string;
   title: string;
@@ -46,6 +47,9 @@ export interface VideoMeta {
   url: string;
   tracks: CaptionTrack[];
   audio: AudioFormat[];
+  /** Direct audio file for cloud ASR when the site is not YouTube (podcast episodes). */
+  audioUrl?: string;
+  site?: 'youtube' | 'xiaoyuzhou';
   originalLanguage?: string;
   channelId?: string;
   capturedAt: number;
@@ -64,6 +68,8 @@ export interface EpisodeRecord {
   language: string;
   /** Audio-track language the player reported when this transcript was fetched (dedupes refetches). */
   spokenLanguage?: string;
+  /** The user picked this caption track by hand, so automatic track correction must not replace it. */
+  manualTrack?: boolean;
   source: EpisodeSource;
   /** The shared version's own source (`official`, `cloud`, `whisper`, `qwen3`) when source is `shared`. */
   sharedSource?: string;
@@ -147,7 +153,11 @@ export interface ExtensionSettings {
   acknowledgedKeyRisk?: boolean;
 }
 
-export const EPISODE_KEY = (videoId: string) => `yt:${videoId}`;
+/** YouTube ids get the `yt:` prefix the shared service expects; podcast ids (`qm:<eid>`) already
+ *  carry the desktop app's key and pass through unchanged. */
+const KEY_PREFIX = /^(?:yt|qm|guid|audio|pod):/;
+
+export const EPISODE_KEY = (videoId: string) => (KEY_PREFIX.test(videoId) ? videoId : `yt:${videoId}`);
 
 export function isDisplayMode(x: unknown): x is DisplayMode {
   return x === 'bilingual' || x === 'zh' || x === 'original';

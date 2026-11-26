@@ -118,6 +118,7 @@ export function metaFromPlayerResponse(player: any, videoId: string, url: string
     url,
     tracks: captionTracks(player),
     audio: audioFormats(player),
+    site: 'youtube',
     originalLanguage: originalLanguage(player),
     channelId: typeof d.channelId === 'string' ? d.channelId : undefined,
     capturedAt: Date.now(),

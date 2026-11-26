@@ -5,14 +5,16 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
-    name: 'SubCast · 声渡 — YouTube 双语字幕',
-    description: 'YouTube 双语字幕、AI 导读和带时间戳的 AI 问答。共享字幕优先，没有官方字幕时可用自己的 Key 走云端识别。',
+    name: 'SubCast · 声渡 — 视频与播客字幕',
+    description: 'YouTube 视频和小宇宙播客的双语字幕、AI 导读和带时间戳的 AI 问答。共享字幕优先，没有字幕时可用自己的 Key 走云端识别。',
     // Version comes from package.json (WXT default), so `npm version` is the single source of truth.
     minimum_chrome_version: '116',
     permissions: ['storage', 'unlimitedStorage', 'sidePanel', 'offscreen', 'tabs', 'scripting'],
     host_permissions: [
       'https://www.youtube.com/*',
       'https://*.googlevideo.com/*',
+      'https://*.xyzcdn.net/*',
+      'https://media.xiaoyuzhoufm.com/*',
       'https://subcast.qiaomu.ai/*',
       'https://translate.googleapis.com/*',
       'https://elon.qiaomu.ai/*',

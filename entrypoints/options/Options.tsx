@@ -1,6 +1,7 @@
 import { Check, Copy, ExternalLink, Eye, EyeOff, Info, KeyRound, Loader2, ShieldCheck, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { clearCachedEpisodes, storageInfo } from '../../src/lib/db';
+import { requestOrigins } from '../../src/lib/permissions';
 import { ASR_PRESETS, getSettings, LLM_PRESETS, saveSettings } from '../../src/lib/settings';
 import type { DisplayMode, ExtensionSettings } from '../../src/lib/types';
 
@@ -19,26 +20,6 @@ const LANGUAGES: { id: string; name: string }[] = [
   { id: 'pt', name: '葡萄牙语' },
   { id: 'ru', name: '俄语' },
 ];
-
-function originPattern(url: string): string | null {
-  try {
-    const u = new URL(url);
-    return `${u.protocol}//${u.host}/*`;
-  } catch {
-    return null;
-  }
-}
-
-async function requestOrigins(urls: string[]): Promise<boolean> {
-  const origins = [...new Set(urls.map(originPattern).filter((x): x is string => Boolean(x)))];
-  if (!origins.length) return true;
-  const missing: string[] = [];
-  for (const o of origins) {
-    if (!(await chrome.permissions.contains({ origins: [o] }))) missing.push(o);
-  }
-  if (!missing.length) return true;
-  return chrome.permissions.request({ origins: missing });
-}
 
 function sendToBackground<T>(msg: unknown): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -167,7 +148,7 @@ export default function Options() {
           <span className="logo">声</span>
           <div>
             <h1>SubCast 设置</h1>
-            <p>声渡 Chrome 插件 · YouTube 双语字幕、导读与问答</p>
+            <p>声渡 Chrome 插件 · YouTube 与小宇宙播客的双语字幕、导读与问答</p>
           </div>
         </div>
         <div className="top-actions">
@@ -287,7 +268,7 @@ export default function Options() {
 
         <section className="card">
           <h2>云端识别（没有字幕时）</h2>
-          <p className="section-sub">YouTube 没有字幕、共享库里也没有时，可以把音频发给你自己的识别服务转写。音频只发给下面选的服务。</p>
+          <p className="section-sub">YouTube 没有字幕、共享库里也没有时，或者小宇宙播客单集（没有字幕轨），可以把音频发给你自己的识别服务转写。音频只发给下面选的服务。</p>
           <Field label="识别服务">
             <select
               value={settings.asrEngine}
@@ -329,7 +310,7 @@ export default function Options() {
               </div>
               <div className="inline-note">
                 <Info size={14} />
-                音频按约 8 分钟切块上传（每块小于 25 MB）。会员、直播或受限制的视频可能拿不到音频流，扩展会明确提示。
+                音频按约 8 分钟切块上传（每块小于 25 MB）。会员、直播或受限制的视频可能拿不到音频流；小宇宙付费/私密单集没有公开音频，扩展会明确提示。
               </div>
             </>
           )}

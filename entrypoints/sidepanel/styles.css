@@ -263,6 +263,22 @@ select {
   flex: 1;
 }
 
+.track-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.track-pick select {
+  max-width: 168px;
+  padding: 2px 4px;
+  font-size: 11px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;

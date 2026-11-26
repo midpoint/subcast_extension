@@ -1,4 +1,5 @@
 import type {
+  CaptionTrack,
   ChatTurn,
   DisplayMode,
   EpisodeSource,
@@ -14,6 +15,7 @@ export type PanelRequest =
   | { type: 'PANEL_HELLO'; tabId?: number }
   | { type: 'RELOAD_STATE'; tabId?: number }
   | { type: 'LOAD'; videoId: string; force?: boolean }
+  | { type: 'LOAD_TRACK'; videoId: string; track: CaptionTrack }
   | { type: 'TRANSLATE'; videoId: string }
   | { type: 'CANCEL_TRANSLATE'; videoId: string }
   | { type: 'SEEK'; seconds: number }
