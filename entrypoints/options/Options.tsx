@@ -257,6 +257,12 @@ export default function Options() {
         <section className="card">
           <h2>字幕与显示</h2>
           <Toggle on={settings.autoTranslate} onChange={(v) => set({ autoTranslate: v })} label="打开视频后自动翻译" hint="关掉后可以在侧边栏里手动点「翻译成中文」。" />
+          <Toggle
+            on={settings.autoPunctuate}
+            onChange={(v) => set({ autoPunctuate: v })}
+            label="给中文字幕自动补标点"
+            hint="机器翻译的中文行缺少标点时，用上面配置的模型补全，只加标点、不改字。没配模型时跳过，会产生少量模型费用。"
+          />
           <Toggle on={settings.overlay} onChange={(v) => set({ overlay: v })} label="在视频画面上显示字幕" hint="除了侧边栏列表，也在播放器上显示当前这一句。" />
           <Field label="默认显示方式">
             <select value={settings.displayMode} onChange={(e) => set({ displayMode: e.target.value as DisplayMode })}>

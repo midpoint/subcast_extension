@@ -5,12 +5,18 @@ import { transcribeAudio } from '../../src/lib/asr';
 import { getEpisode, putEpisode, updateEpisode } from '../../src/lib/db';
 import { llmReady } from '../../src/lib/llm';
 import type { OffscreenRequest } from '../../src/lib/messages';
+import { punctuateItems } from '../../src/lib/punctuate';
 import { translateWithGoogle, translateWithLlm } from '../../src/lib/translate';
 import type { EpisodeRecord } from '../../src/lib/types';
 import { EPISODE_KEY } from '../../src/lib/types';
 
 const controllers = new Map<string, AbortController>();
 const running = new Set<string>();
+const punctuateControllers = new Map<string, AbortController>();
+const punctuateRuns = new Set<string>();
+/** Bumped whenever a translation starts; a punctuation pass from an older epoch must not write. */
+const translationEpoch = new Map<string, number>();
+const epochOf = (videoId: string) => translationEpoch.get(videoId) ?? 0;
 
 function send(msg: unknown) {
   try {
@@ -29,6 +35,9 @@ function normalize(items: (string | null)[], n: number): (string | null)[] {
 async function runTranslate(msg: Extract<OffscreenRequest, { type: 'OFFSCREEN_TRANSLATE' }>): Promise<void> {
   const { videoId } = msg;
   if (running.has(videoId)) return;
+  // A fresh translation replaces every item, so a punctuation pass on the old items must stop.
+  punctuateControllers.get(videoId)?.abort();
+  translationEpoch.set(videoId, epochOf(videoId) + 1);
   running.add(videoId);
   const controller = new AbortController();
   controllers.set(videoId, controller);
@@ -85,6 +94,60 @@ async function runTranslate(msg: Extract<OffscreenRequest, { type: 'OFFSCREEN_TR
   }
 }
 
+async function runPunctuate(msg: Extract<OffscreenRequest, { type: 'OFFSCREEN_PUNCTUATE' }>): Promise<void> {
+  const { videoId } = msg;
+  if (punctuateRuns.has(videoId)) return;
+  if (running.has(videoId)) {
+    send({ type: 'PU_CANCELLED', videoId });
+    return;
+  }
+  punctuateRuns.add(videoId);
+  const epoch = epochOf(videoId);
+  const controller = new AbortController();
+  punctuateControllers.set(videoId, controller);
+  const key = EPISODE_KEY(videoId);
+  try {
+    const ep = await getEpisode(key);
+    if (!ep?.translation) {
+      send({ type: 'PU_DONE', videoId, changed: 0, total: 0 });
+      return;
+    }
+    let saveChain: Promise<unknown> = Promise.resolve();
+    const persist = (items: (string | null)[]) => {
+      saveChain = saveChain.then(() =>
+        updateEpisode(key, (cur) => {
+          if (!cur.translation || epochOf(videoId) !== epoch) return cur;
+          return { ...cur, translation: { ...cur.translation, items }, updatedAt: Date.now() };
+        }),
+      );
+    };
+    const result = await punctuateItems(ep.segments, ep.translation.items, {
+      cfg: msg.llm,
+      signal: controller.signal,
+      onProgress: (items, done, total) => {
+        persist(items);
+        send({ type: 'PU_PROGRESS', videoId, done, total });
+      },
+    });
+    await saveChain;
+    await updateEpisode(key, (cur) => {
+      if (!cur.translation || epochOf(videoId) !== epoch) return cur;
+      return {
+        ...cur,
+        translation: { ...cur.translation, items: result.items, punctuatedAt: Date.now() },
+        updatedAt: Date.now(),
+      };
+    });
+    send({ type: 'PU_DONE', videoId, changed: result.changed, total: result.items.length });
+  } catch (e) {
+    if ((e as Error)?.name === 'AbortError') send({ type: 'PU_CANCELLED', videoId });
+    else send({ type: 'PU_ERROR', videoId, message: e instanceof Error ? e.message : String(e) });
+  } finally {
+    punctuateControllers.delete(videoId);
+    punctuateRuns.delete(videoId);
+  }
+}
+
 async function runAsr(msg: Extract<OffscreenRequest, { type: 'OFFSCREEN_ASR' }>): Promise<void> {
   const { videoId } = msg;
   if (running.has(videoId)) return;
@@ -138,8 +201,13 @@ chrome.runtime.onMessage.addListener((msg: OffscreenRequest, _sender, _sendRespo
     void runAsr(msg);
     return false;
   }
+  if (msg.type === 'OFFSCREEN_PUNCTUATE') {
+    void runPunctuate(msg);
+    return false;
+  }
   if (msg.type === 'OFFSCREEN_CANCEL') {
     controllers.get(msg.videoId)?.abort();
+    punctuateControllers.get(msg.videoId)?.abort();
     return false;
   }
   return false;

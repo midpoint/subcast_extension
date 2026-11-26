@@ -14,6 +14,8 @@ export interface Translation {
   items: (string | null)[];
   /** "partial" while batches are still arriving; cached across page reloads. */
   status: 'partial' | 'done';
+  /** Set when the Chinese punctuation pass finished (absent = not tried yet). */
+  punctuatedAt?: number;
   updatedAt: number;
 }
 
@@ -124,6 +126,8 @@ export interface ExtensionSettings {
   translateEngine: 'google' | 'llm';
   llm: LlmConfig;
   autoTranslate: boolean;
+  /** Fill in missing punctuation in the Chinese translation with the configured model. */
+  autoPunctuate: boolean;
   useShared: boolean;
   shareTranscripts: boolean;
   displayMode: DisplayMode;

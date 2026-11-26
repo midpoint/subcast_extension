@@ -11,6 +11,7 @@ import { GUIDE_SYSTEM, guidePrompt, qaSystem, transcriptForModel } from '../src/
 import { ASR_PRESETS, getSettings, onSettingsChanged, saveSettings } from '../src/lib/settings';
 import { lookupGuide, lookupTranscript, uploadTranscript, type SharedTranscript } from '../src/lib/shared';
 import { needsTranslation, shouldTranslate } from '../src/lib/translate';
+import { punctuationTargets } from '../src/lib/punctuate';
 import type { EpisodeRecord, TabSnapshot, VideoMeta } from '../src/lib/types';
 import { EPISODE_KEY } from '../src/lib/types';
 import { fetchInnerTubeMeta, fetchTrackSegments } from '../src/lib/youtube';
@@ -24,6 +25,7 @@ const panelTabs = new Map<chrome.runtime.Port, number | null>();
 const contentPorts = new Map<number, chrome.runtime.Port>();
 const pipelineRuns = new Map<string, Promise<void>>();
 const translating = new Set<string>();
+const punctuating = new Set<string>();
 const asrJobs = new Set<string>();
 const uploading = new Set<string>();
 const guideJobs = new Set<string>();
@@ -394,7 +396,7 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
     const cached = await getEpisode(key);
     if (cached && cached.segments.length && !force) {
       notifyEpisode(tabId, cached);
-      maybeAutoTranslate(tabId, cached, settings.autoTranslate);
+      if (!maybeAutoTranslate(tabId, cached, settings.autoTranslate)) void maybePunctuate(cached);
       return;
     }
     setStatus(tabId, { state: 'loading', step: settings.useShared ? '查询共享字幕' : '获取 YouTube 字幕' });
@@ -405,7 +407,7 @@ function ensureEpisode(tabId: number, meta: VideoMeta, force = false): Promise<v
         await putEpisode(rec);
         notifyEpisode(tabId, rec);
         log('shared hit', key, hit.source, hit.segments.length);
-        maybeAutoTranslate(tabId, rec, settings.autoTranslate);
+        if (!maybeAutoTranslate(tabId, rec, settings.autoTranslate)) void maybePunctuate(rec);
         return;
       }
     }
@@ -533,13 +535,32 @@ function notifyEpisode(tabId: number, rec: EpisodeRecord) {
   scheduleSubtitles(tabId);
 }
 
-function maybeAutoTranslate(tabId: number, rec: EpisodeRecord, auto: boolean) {
-  if (!auto) return;
-  if (!shouldTranslate(rec.language)) return;
-  const items = rec.translation?.items ?? [];
-  if (rec.translation?.status === 'done' && !needsTranslation(items, rec.segments)) return;
-  if (!needsTranslation(items, rec.segments)) return;
+/** Starts auto-translation when it is still needed; returns whether a translation job was started. */
+function maybeAutoTranslate(tabId: number, rec: EpisodeRecord, auto: boolean): boolean {
+  if (!auto) return false;
+  if (!shouldTranslate(rec.language)) return false;
+  if (!needsTranslation(rec.translation?.items ?? [], rec.segments)) return false;
   void startTranslate(tabId, rec).catch((e) => log('translate start failed', e));
+  return true;
+}
+
+/** Adds punctuation to Chinese translation lines that lack it, with the user's own model. */
+async function maybePunctuate(rec: EpisodeRecord): Promise<void> {
+  const translation = rec.translation;
+  if (!translation || translation.punctuatedAt) return;
+  if (!punctuationTargets(rec.segments, translation.items).length) return;
+  if (punctuating.has(rec.videoId) || translating.has(rec.videoId)) return;
+  const settings = await getSettings();
+  if (!settings.autoPunctuate || !llmReady(settings.llm)) return;
+  if (punctuating.has(rec.videoId) || translating.has(rec.videoId)) return;
+  punctuating.add(rec.videoId);
+  try {
+    await ensureOffscreen();
+    await sendOffscreen({ type: 'OFFSCREEN_PUNCTUATE', videoId: rec.videoId, llm: settings.llm });
+  } catch (e) {
+    punctuating.delete(rec.videoId);
+    log('punctuate start failed', e);
+  }
 }
 
 /* ------------------------------------------------------------------------------------------------ */
@@ -803,6 +824,7 @@ async function handleOffscreenEvent(msg: OffscreenEvent): Promise<void> {
       const st = findVideoState(msg.videoId);
       if (st) scheduleSubtitles(st.tabId);
       if (rec.source === 'cloud') void maybeUpload(rec);
+      void maybePunctuate(rec);
     }
     return;
   }
@@ -843,6 +865,31 @@ async function handleOffscreenEvent(msg: OffscreenEvent): Promise<void> {
     asrJobs.delete(msg.videoId);
     setStatusForVideo(msg.videoId, { state: 'error', message: `云端识别失败：${msg.message}` });
     broadcast({ type: 'ASR_ERROR', videoId: msg.videoId, message: msg.message });
+    return;
+  }
+  if (msg.type === 'PU_PROGRESS') {
+    revision++;
+    broadcast({ type: 'EPISODE_UPDATED', videoId: msg.videoId, revision });
+    const st = findVideoState(msg.videoId);
+    if (st) scheduleSubtitles(st.tabId);
+    return;
+  }
+  if (msg.type === 'PU_DONE') {
+    punctuating.delete(msg.videoId);
+    revision++;
+    broadcast({ type: 'EPISODE_UPDATED', videoId: msg.videoId, revision });
+    const st = findVideoState(msg.videoId);
+    if (st) scheduleSubtitles(st.tabId);
+    log('punctuation', msg.videoId, `${msg.changed}/${msg.total}`);
+    return;
+  }
+  if (msg.type === 'PU_CANCELLED') {
+    punctuating.delete(msg.videoId);
+    return;
+  }
+  if (msg.type === 'PU_ERROR') {
+    punctuating.delete(msg.videoId);
+    log('punctuation failed', msg.videoId, msg.message);
   }
 }
 
@@ -963,7 +1010,7 @@ export default defineBackground(() => {
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg?.type) return false;
-    if (msg.type === 'TR_PROGRESS' || msg.type === 'TR_DONE' || msg.type === 'TR_ERROR' || msg.type === 'TR_CANCELLED' || msg.type === 'ASR_PROGRESS' || msg.type === 'ASR_DONE' || msg.type === 'ASR_ERROR') {
+    if (msg.type === 'TR_PROGRESS' || msg.type === 'TR_DONE' || msg.type === 'TR_ERROR' || msg.type === 'TR_CANCELLED' || msg.type === 'ASR_PROGRESS' || msg.type === 'ASR_DONE' || msg.type === 'ASR_ERROR' || msg.type === 'PU_PROGRESS' || msg.type === 'PU_DONE' || msg.type === 'PU_ERROR' || msg.type === 'PU_CANCELLED') {
       void handleOffscreenEvent(msg as OffscreenEvent);
       return false;
     }
@@ -1032,6 +1079,14 @@ export default defineBackground(() => {
       for (const tabId of tabStates.keys()) await sendSettingsToContent(tabId);
       for (const tabId of tabStates.keys()) scheduleSubtitles(tabId);
       if (s.overlay != null) broadcastSnapshot();
+      // Turning the option on while a video is open should punctuate what is already translated.
+      if (s.autoPunctuate) {
+        for (const st of tabStates.values()) {
+          if (!st.videoId) continue;
+          const rec = await getEpisode(EPISODE_KEY(st.videoId));
+          if (rec) void maybePunctuate(rec);
+        }
+      }
     })();
   });
 });

@@ -90,6 +90,11 @@ export type OffscreenRequest =
       language: string;
       meta: { title: string; channel: string; duration: number };
     }
+  | {
+      type: 'OFFSCREEN_PUNCTUATE';
+      videoId: string;
+      llm: LlmConfig;
+    }
   | { type: 'OFFSCREEN_CANCEL'; videoId: string };
 
 /** Offscreen → background. */
@@ -101,6 +106,10 @@ export type OffscreenEvent =
   | { type: 'ASR_PROGRESS'; videoId: string; stage: string; percent: number; message: string }
   | { type: 'ASR_DONE'; videoId: string; language: string; model: string; segments: Segment[] }
   | { type: 'ASR_ERROR'; videoId: string; message: string }
+  | { type: 'PU_PROGRESS'; videoId: string; done: number; total: number }
+  | { type: 'PU_DONE'; videoId: string; changed: number; total: number }
+  | { type: 'PU_ERROR'; videoId: string; message: string }
+  | { type: 'PU_CANCELLED'; videoId: string }
   | { type: 'OFFSCREEN_READY' };
 
 export interface SettingsSnapshot {
