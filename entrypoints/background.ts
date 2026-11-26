@@ -713,36 +713,34 @@ function maybeAutoTranslate(tabId: number, rec: EpisodeRecord, auto: boolean): b
   return true;
 }
 
+/** Which lines the punctuation pass should touch. The translation is preferred when there is one;
+ *  otherwise the transcript itself is punctuated when it contains Chinese. Looking at the text
+ *  rather than only the detected language matters when ASR mislabels Chinese audio as English and
+ *  no translation is configured. */
+function punctuationTarget(rec: EpisodeRecord): 'segments' | 'translation' | null {
+  if (rec.translation?.items.length) return 'translation';
+  return rec.segments.some((s) => /[\u3400-\u9fff]/.test(s.text)) ? 'segments' : null;
+}
+
 /** Chinese transcript punctuation. For a Chinese video the source captions are what the user reads,
- *  so they are punctuated directly; other languages punctuate the Chinese translation instead. */
+ *  so they are punctuated directly; other languages punctuate the Chinese translation instead.
+ *  `punctuatedAt` is not trusted: cached records written before the local fallback existed (or by a
+ *  model that returned nothing) may carry it while the text is still unpunctuated. */
 async function maybePunctuate(rec: EpisodeRecord): Promise<void> {
-  const target: 'segments' | 'translation' = shouldTranslate(rec.language) ? 'translation' : 'segments';
-  let targets: number[];
-  if (target === 'segments') {
-    if (rec.punctuatedAt) return;
-    targets = punctuationTargets(rec.segments, segmentTexts(rec.segments));
-    if (!targets.length) return;
-  } else {
-    const translation = rec.translation;
-    if (!translation || translation.punctuatedAt) return;
-    targets = punctuationTargets(rec.segments, translation.items);
-    if (!targets.length) return;
-  }
+  const target = punctuationTarget(rec);
+  if (!target) return;
+  const items = target === 'segments' ? segmentTexts(rec.segments) : rec.translation?.items;
+  if (!items) return;
+  if (!punctuationTargets(rec.segments, items).length) return;
   if (punctuating.has(rec.videoId) || translating.has(rec.videoId)) return;
   const settings = await getSettings();
   if (!settings.autoPunctuate) return;
   if (!llmReady(settings.llm)) {
     // A model gives the best punctuation, but cloud ASR without one must not leave the transcript
     // unpunctuated: fill in sentence ends and clear clause boundaries locally.
-    punctuating.add(rec.videoId);
-    try {
-      await localPunctuate(rec, target, targets);
-    } finally {
-      punctuating.delete(rec.videoId);
-    }
+    await localPunctuationFor(rec.videoId);
     return;
   }
-  if (punctuating.has(rec.videoId) || translating.has(rec.videoId)) return;
   punctuating.add(rec.videoId);
   try {
     await ensureOffscreen();
@@ -750,6 +748,32 @@ async function maybePunctuate(rec: EpisodeRecord): Promise<void> {
   } catch (e) {
     punctuating.delete(rec.videoId);
     log('punctuate start failed', e);
+    // The model path can fail before it starts (no offscreen document, broken endpoint); never let
+    // that leave the subtitles without any punctuation.
+    void localPunctuationFor(rec.videoId);
+  }
+}
+
+/** Re-reads the record and fills in the remaining lines with the local rules. Runs after a model
+ *  pass too: the model may reject lines or return nothing at all, and every line still needs an
+ *  ending. Safe to call often — it returns when there is nothing left to punctuate. */
+async function localPunctuationFor(videoId: string): Promise<void> {
+  if (punctuating.has(videoId) || translating.has(videoId)) return;
+  punctuating.add(videoId);
+  try {
+    const rec = await getEpisode(EPISODE_KEY(videoId));
+    if (!rec) return;
+    const target = punctuationTarget(rec);
+    if (!target) return;
+    const items = target === 'segments' ? segmentTexts(rec.segments) : rec.translation?.items;
+    if (!items) return;
+    const targets = punctuationTargets(rec.segments, items);
+    if (!targets.length) return;
+    await localPunctuate(rec, target, targets);
+  } catch (e) {
+    log('local punctuation failed', videoId, e);
+  } finally {
+    punctuating.delete(videoId);
   }
 }
 
@@ -1084,6 +1108,11 @@ async function handleOffscreenEvent(msg: OffscreenEvent): Promise<void> {
     translating.delete(msg.videoId);
     setStatusForVideo(msg.videoId, { state: 'error', message: `翻译失败：${msg.message}` });
     broadcast({ type: 'TOAST', kind: 'error', message: `翻译失败：${msg.message}` });
+    // A failed translation must not also cost the transcript its punctuation (e.g. Chinese audio
+    // whose language was misdetected, so the transcript is what the panel shows).
+    void getEpisode(EPISODE_KEY(msg.videoId)).then((rec) => {
+      if (rec) void maybePunctuate(rec);
+    });
     return;
   }
   if (msg.type === 'ASR_PROGRESS') {
@@ -1129,6 +1158,8 @@ async function handleOffscreenEvent(msg: OffscreenEvent): Promise<void> {
     const st = findVideoState(msg.videoId);
     if (st) scheduleSubtitles(st.tabId);
     log('punctuation', msg.videoId, `${msg.changed}/${msg.total}`);
+    // Whatever the model skipped or could not punctuate still needs an ending.
+    void localPunctuationFor(msg.videoId);
     return;
   }
   if (msg.type === 'PU_CANCELLED') {
@@ -1138,6 +1169,7 @@ async function handleOffscreenEvent(msg: OffscreenEvent): Promise<void> {
   if (msg.type === 'PU_ERROR') {
     punctuating.delete(msg.videoId);
     log('punctuation failed', msg.videoId, msg.message);
+    void localPunctuationFor(msg.videoId);
   }
 }
 

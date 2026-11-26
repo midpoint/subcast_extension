@@ -150,7 +150,9 @@ async function runPunctuate(msg: Extract<OffscreenRequest, { type: 'OFFSCREEN_PU
       },
     });
     await saveChain;
-    await updateEpisode(key, (cur) => apply(cur, result.items, true) ?? cur);
+    // Only mark the record as punctuated when something actually changed. A model that echoed the
+    // lines back (or whose answers were rejected) must not suppress later attempts.
+    await updateEpisode(key, (cur) => apply(cur, result.items, result.changed > 0) ?? cur);
     send({ type: 'PU_DONE', videoId, changed: result.changed, total: result.items.length });
   } catch (e) {
     if ((e as Error)?.name === 'AbortError') send({ type: 'PU_CANCELLED', videoId });

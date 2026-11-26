@@ -242,7 +242,7 @@ export default function Options() {
             on={settings.autoPunctuate}
             onChange={(v) => set({ autoPunctuate: v })}
             label="给中文字幕自动补标点"
-            hint="YouTube 中文字幕或中文译文缺少标点时自动补全，只加标点、不改字。配了模型就用模型（会产生少量费用），没配模型时用本地规则补句末标点和常见句间逗号。"
+            hint="YouTube 中文字幕或中文译文缺少标点时自动补全，只加标点、不改字。配了模型就用模型（会产生少量费用）；没配模型，或模型请求失败/没有补出标点时，再用本地规则补句末标点和常见句间逗号。"
           />
           <Toggle on={settings.overlay} onChange={(v) => set({ overlay: v })} label="在视频画面上显示字幕" hint="除了侧边栏列表，也在播放器上显示当前这一句。" />
           <Field label="默认显示方式">
